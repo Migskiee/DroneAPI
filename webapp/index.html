@@ -1,47 +1,177 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>DroneDeliveryAPI - Dashboard</title>
-        <link rel="stylesheet" href="style.css">
-    </head>
-    <body>
-        <div class="left-container">
-            <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
-            <ul>
-                <li><a href="#" class="nav-link active" data-target="inspectionlauncher">INSPECTION LAUNCHER</a></li>
-                <li><a href="#" class="nav-link" data-target="bridges">BRIDGES</a></li>
-                <li><a href="#" class="nav-link" data-target="analytics">ANALYTICS</a></li>
-            </ul>
-        </div>
-        <div class="right-container">
-            <main class="content">
-                <section id="inspectionlauncher" class="content-section">
-                    <h2>Inspection Launcher</h2>
+
+<head>
+    <title>DroneDeliveryAPI - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="left-container">
+        <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
+        <ul>
+            <li><a href="#" class="nav-link active" data-target="inspectionlauncher">INSPECTION LAUNCHER</a></li>
+            <li><a href="#" class="nav-link" data-target="bridges">BRIDGES</a></li>
+            <li><a href="#" class="nav-link" data-target="analytics">ANALYTICS</a></li>
+        </ul>
+    </div>
+    <div class="right-container">
+        <main class="content">
+            <section id="inspectionlauncher" class="content-section">
+                <h2 class="section-title">INSPECTION LAUNCHER</h2>
+
+                <div class="launcher-layout">
+
+                    <div class="camera-section">
+                        <h3 class="feed-label"><span class="live-dot"></span> LIVE DRONE TRANSMISSION</h3>
+
+                        <div class="video-frame">
+                            <img id="videoStream" src="" alt="Awaiting camera connection...">
+                        </div>
+
                         <div class="controls">
-                            <button onclick="startCamera()">Start Camera</button>
-                            <button onclick="flyDrone()">Fly Drone</button>
+                            <button class="btn btn-primary" onclick="startCamera()">Start Camera</button>
                         </div>
-                        
-                        <div class="video-container">
-                            <img id="videoStream" src="" alt="Drone Feed">
-                        </div>
-                        
-                        <div class="status">
-                            <p>Status: <span id="statusText">Disconnected</span></p>
-                        </div>
-                </section>
+                    </div>
 
-                <section id="bridges" class="content-section" style="display:none;">
-                    <h2>Bridges</h2>
-                    <p>Database of inspected bridges and scan history.</p>
-                </section>
+                    <div class="status-panel">
+                        <h3>System Status</h3>
 
-                <section id="analytics" class="content-section" style="display:none;">
-                    <h2>Analytics</h2>
-                    <p>Defect detection metrics and statistical charts.</p>
-                </section>
-            </main>
-        </div>
-        <script src="script.js"></script>
-    </body>
+                        <div class="status-grid">
+                            <div class="status-item">
+                                <span class="status-label">Connection:</span>
+                                <span id="connectionStatus" class="badge badge-offline">Offline</span>
+                            </div>
+
+                            <div class="status-item">
+                                <span class="status-label">Camera:</span>
+                                <span id="cameraStatus" class="badge badge-offline">Inactive</span>
+                            </div>
+
+                            <div class="status-item">
+                                <span class="status-label">Flight Controller:</span>
+                                <span id="fcStatus">Pixhawk - Standby</span>
+                            </div>
+
+                            <div class="status-item">
+                                <span class="status-label">Location:</span>
+                                <span id="locationStatus">Borongan Bridge - Zone A</span>
+                            </div>
+
+                            <div class="status-item">
+                                <span class="status-label">Battery:</span>
+                                <div class="battery-container">
+                                    <div class="battery-level" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <section id="bridges" class="content-section" style="display:none;">
+
+                <div id="bridgeListView">
+                    <div class="bridge-header-bar">
+                        <h2 class="section-title">BRIDGE DATABASE</h2>
+                        <input type="text" id="bridgeSearch" class="search-input"
+                            placeholder="Search by name or location...">
+                    </div>
+
+                    <div class="bridge-grid" id="bridgeGrid"></div>
+                </div>
+
+                <div id="bridgeDetailView" style="display:none;">
+                    <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to
+                        Database</button>
+
+                    <div class="detail-header">
+                        <h2 id="detailName">Bridge Name</h2>
+                        <p id="detailLocation" class="text-muted">Location</p>
+                        <span id="detailId" class="badge badge-online">ID</span>
+                    </div>
+
+                    <div class="detail-layout">
+                        <div class="detail-images">
+                            <h3>Captured Scan Images</h3>
+                            <div class="image-grid">
+                                <div class="img-placeholder">Top Deck View</div>
+                                <div class="img-placeholder">Pillar Scan A</div>
+                                <div class="img-placeholder">Underside View</div>
+                                <div class="img-placeholder">Pillar Scan B</div>
+                            </div>
+                        </div>
+
+                        <div class="detail-analytics">
+                            <h3>Defect Analysis Distribution</h3>
+                            <div class="chart-container">
+                                <canvas id="defectChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <section id="analytics" class="content-section" style="display:none;">
+                <h2 class="section-title">SYSTEM ANALYTICS</h2>
+
+                <div class="analytics-top-row">
+
+                    <div class="analytics-chart-panel">
+                        <h3>Overall Bridge Conditions</h3>
+                        <div class="global-chart-container">
+                            <canvas id="globalConditionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="analytics-details-panel">
+                        <h3>Condition Breakdown</h3>
+                        <p class="text-muted">Total number of bridges currently classified in each structural condition.
+                        </p>
+
+                        <ul class="condition-list stats-list">
+                            <li>
+                                <div class="label-group">
+                                    <span class="color-dot dot-good"></span>
+                                    <strong>Good</strong>
+                                </div>
+                                <span class="stat-value" id="countGood">0</span>
+                            </li>
+                            <li>
+                                <div class="label-group">
+                                    <span class="color-dot dot-poor"></span>
+                                    <strong>Poor</strong>
+                                </div>
+                                <span class="stat-value" id="countPoor">0</span>
+                            </li>
+                            <li>
+                                <div class="label-group">
+                                    <span class="color-dot dot-bad"></span>
+                                    <strong>Bad</strong>
+                                </div>
+                                <span class="stat-value" id="countBad">0</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="analytics-summary-row">
+                    <div class="summary-card">
+                        <h4>Total Registered Bridges</h4>
+                        <span class="summary-value" id="totalBridgesValue">0</span>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Defects Detected</h4>
+                        <span class="summary-value" id="totalDefectsValue">0</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+
 </html>
