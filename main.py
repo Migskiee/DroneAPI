@@ -1,6 +1,14 @@
 import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+import cloudinary
+import cloudinary.uploader
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUD_NAME"),
+    api_key=os.getenv("CD_API_KEY"),
+    api_secret=os.getenv("CD_API_SECRET")
+)
 
 app = FastAPI()
 
