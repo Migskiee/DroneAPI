@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drone Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>🚁 Drone Control Dashboard</h1>
+
+<div class="controls">
+    <button onclick="startCamera()">Start Camera</button>
+    <button onclick="flyDrone()">Fly Drone</button>
+</div>
+
+<div class="video-container">
+    <img id="videoStream" src="http://YOUR_PI_IP:5000/video" />
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
