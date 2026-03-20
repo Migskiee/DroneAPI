@@ -1,23 +1,47 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Drone Dashboard</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+    <head>
+        <title>DroneDeliveryAPI - Dashboard</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <div class="left-container">
+            <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
+            <ul>
+                <li><a href="#" class="nav-link active" data-target="inspectionlauncher">INSPECTION LAUNCHER</a></li>
+                <li><a href="#" class="nav-link" data-target="bridges">BRIDGES</a></li>
+                <li><a href="#" class="nav-link" data-target="analytics">ANALYTICS</a></li>
+            </ul>
+        </div>
+        <div class="right-container">
+            <main class="content">
+                <section id="inspectionlauncher" class="content-section">
+                    <h2>Inspection Launcher</h2>
+                        <div class="controls">
+                            <button onclick="startCamera()">Start Camera</button>
+                            <button onclick="flyDrone()">Fly Drone</button>
+                        </div>
+                        
+                        <div class="video-container">
+                            <img id="videoStream" src="" alt="Drone Feed">
+                        </div>
+                        
+                        <div class="status">
+                            <p>Status: <span id="statusText">Disconnected</span></p>
+                        </div>
+                </section>
 
-<h1>🚁 Drone Control Dashboard</h1>
+                <section id="bridges" class="content-section" style="display:none;">
+                    <h2>Bridges</h2>
+                    <p>Database of inspected bridges and scan history.</p>
+                </section>
 
-<div class="controls">
-    <button onclick="startCamera()">Start Camera</button>
-    <button onclick="flyDrone()">Fly Drone</button>
-</div>
-
-<div class="video-container">
-    <img id="videoStream" src="http://YOUR_PI_IP:5000/video" />
-</div>
-
-<script src="script.js"></script>
-
-</body>
+                <section id="analytics" class="content-section" style="display:none;">
+                    <h2>Analytics</h2>
+                    <p>Defect detection metrics and statistical charts.</p>
+                </section>
+            </main>
+        </div>
+        <script src="script.js"></script>
+    </body>
 </html>
