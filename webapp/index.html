@@ -21,23 +21,49 @@
             
             <section id="analytics" class="content-section">
                 <h2 class="section-title">SYSTEM ANALYTICS</h2>
+                
                 <div class="analytics-top-row">
                     <div class="analytics-chart-panel">
                         <h3>Overall Defect Severity</h3>
-                        <div class="global-chart-container"><canvas id="globalConditionChart"></canvas></div>
+                        <div class="global-chart-container">
+                            <canvas id="globalConditionChart"></canvas>
+                        </div>
                     </div>
+
                     <div class="analytics-details-panel">
                         <h3>Severity Breakdown</h3>
+                        <p class="text-muted">Total number of AI-detected anomalies across all registered bridges.</p>
                         <ul class="condition-list stats-list">
-                            <li><div class="label-group"><span class="color-dot dot-bad"></span> <strong>Critical / High</strong></div><span class="stat-value" id="countHigh">0</span></li>
-                            <li><div class="label-group"><span class="color-dot dot-poor"></span> <strong>Review Needed</strong></div><span class="stat-value" id="countReview">0</span></li>
-                            <li><div class="label-group"><span class="color-dot dot-good"></span> <strong>Low / Safe</strong></div><span class="stat-value" id="countLow">0</span></li>
+                            <li>
+                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Critical / High</strong></div>
+                                <span class="stat-value" id="countHigh">0</span>
+                            </li>
+                            <li>
+                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Review Needed</strong></div>
+                                <span class="stat-value" id="countReview">0</span>
+                            </li>
+                            <li>
+                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Low / Safe</strong></div>
+                                <span class="stat-value" id="countLow">0</span>
+                            </li>
                         </ul>
+                    </div>
+                </div>
+
+                <div class="analytics-summary-row">
+                    <div class="summary-card">
+                        <h4>Total Registered Bridges</h4>
+                        <span class="summary-value" id="totalBridgesValue">0</span>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Defects Detected</h4>
+                        <span class="summary-value" id="totalDefectsValue">0</span>
                     </div>
                 </div>
             </section>
 
             <section id="bridges" class="content-section" style="display:none;">
+                
                 <div id="bridgeListView">
                     <div class="bridge-header-bar">
                         <h2 class="section-title">BRIDGE DATABASE</h2>
@@ -56,23 +82,28 @@
                     </div>
 
                     <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
+                        
                         <div class="detail-analytics" style="width: 100%;">
                             <h3>Defect Distribution for this Bridge</h3>
-                            <div class="chart-container"><canvas id="defectChart"></canvas></div>
+                            <div class="chart-container">
+                                <canvas id="defectChart"></canvas>
+                            </div>
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
                             <h3>Inspection Image Gallery</h3>
-                            <p class="text-muted">Manage anomalies captured by the field drone.</p>
+                            <p class="text-muted">Manage anomalies captured by the field drone. Update severity levels or delete false positives.</p>
                             <div id="imageGalleryGrid" class="image-gallery-grid">
-                                </div>
+                            </div>
                         </div>
+
                     </div>
                 </div>
             </section>
 
         </main>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
