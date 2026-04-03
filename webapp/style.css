@@ -61,3 +61,45 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .summary-card { flex: 1; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #3b82f6; }
 .summary-card h4 { font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 .summary-value { font-size: 36px; font-weight: bold; color: #0f172a; }
+
+/* --- CRUD Image Gallery --- */
+.image-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 15px;
+}
+.gallery-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: transform 0.2s;
+}
+.gallery-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 12px -3px rgba(0,0,0,0.1);
+}
+.gallery-img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    background-color: #0f172a;
+}
+.gallery-info {
+    padding: 15px;
+}
+.gallery-info p {
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #334155;
+}
+.crud-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #cbd5e1;
+}
