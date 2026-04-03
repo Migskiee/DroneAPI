@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 import cloudinary
 import cloudinary.uploader
+import uvicorn
 
 # ==========================================
 # CONFIGURATION
@@ -15,7 +16,7 @@ cloudinary.config(
     api_secret=os.getenv("CD_API_SECRET")
 )
 
-# 2. Database Setup (Paste your External TCP Proxy URL here)
+# 2. Database Setup
 RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interchange.proxy.rlwy.net:21621/railway"
 
 app = FastAPI()
@@ -78,3 +79,22 @@ def get_bridge_data():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# FRONTEND MOUNTING & BOOTLOADER
+# ==========================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+web_path = os.path.join(BASE_DIR, "webapp")
+
+# Safety Catch: Create the folder if it doesn't exist so FastAPI doesn't crash
+if not os.path.exists(web_path):
+    os.makedirs(web_path)
+
+# This mounts your HTML, CSS, and JS to the browser
+app.mount("/", StaticFiles(directory=web_path, html=True), name="web")
+
+# THE FOOLPROOF BOOTLOADER
+if __name__ == "__main__":
+    # Grabs the dynamic port from Railway, or defaults to 8000 locally
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
