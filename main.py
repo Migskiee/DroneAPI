@@ -16,7 +16,7 @@ cloudinary.config(
 )
 
 # 2. Database Setup (Paste your External TCP Proxy URL here)
-RAILWAY_DB_URL = "postgresql://postgres:YOUR_PASSWORD@tcp-proxy.railway.app:YOUR_PORT/railway"
+RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interchange.proxy.rlwy.net:21621/railway"
 
 app = FastAPI()
 
