@@ -4,25 +4,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 import cloudinary
 import cloudinary.uploader
-import uvicorn
 
 # ==========================================
 # CONFIGURATION
 # ==========================================
-# 1. Cloudinary Setup
 cloudinary.config(
     cloud_name=os.getenv("CLOUD_NAME"),
     api_key=os.getenv("CD_API_KEY"),
     api_secret=os.getenv("CD_API_SECRET")
 )
 
-# 2. Database Setup
+# Your database URL is hardcoded here so it connects instantly
 RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interchange.proxy.rlwy.net:21621/railway"
 
 app = FastAPI()
 
 # ==========================================
-# API ENDPOINTS (The "Middleman" Logic)
+# API ENDPOINTS
 # ==========================================
 @app.get("/api/bridge-data")
 def get_bridge_data():
@@ -48,7 +46,6 @@ def get_bridge_data():
         
         bridge_list = []
         for b in db_bridges:
-            # Get defect count specifically for this bridge
             cursor.execute("""
                 SELECT severity_level, COUNT(*) FROM captured_images 
                 JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id
@@ -58,7 +55,7 @@ def get_bridge_data():
             bridge_defects = cursor.fetchall()
 
             bridge_list.append({
-                "id": b[1], # bridge_code
+                "id": b[1], 
                 "name": b[2],
                 "location": b[3],
                 "defects": bridge_defects
@@ -81,20 +78,13 @@ def get_bridge_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# FRONTEND MOUNTING & BOOTLOADER
+# FRONTEND MOUNTING (Your original method)
 # ==========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 web_path = os.path.join(BASE_DIR, "webapp")
 
-# Safety Catch: Create the folder if it doesn't exist so FastAPI doesn't crash
+# Safety Catch: Ensure the folder exists
 if not os.path.exists(web_path):
     os.makedirs(web_path)
 
-# This mounts your HTML, CSS, and JS to the browser
 app.mount("/", StaticFiles(directory=web_path, html=True), name="web")
-
-# THE FOOLPROOF BOOTLOADER
-if __name__ == "__main__":
-    # Grabs the dynamic port from Railway, or defaults to 8000 locally
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
