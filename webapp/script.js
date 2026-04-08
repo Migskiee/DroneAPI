@@ -87,36 +87,56 @@ async function deleteDefect(defectId) {
     if(!confirm("Are you sure you want to permanently delete this record?")) return;
     
     try {
-        const response = await fetch(`/api/defects/${defectId}`, { 
-            method: 'DELETE' 
+        const response = await fetch(`/api/defects/${defectId}`, { method: 'DELETE' });
+        if(response.ok) fetchDatabaseStats(); 
+        else alert("Failed to delete record.");
+    } catch (e) { console.error("Delete failed", e); }
+}
+
+// NEW: Save Remarks to Database
+async function saveBridgeRemarks() {
+    if (!currentActiveBridge) return;
+    
+    const newRemarks = document.getElementById('bridgeRemarks').value;
+    const btn = document.querySelector('.btn-primary');
+    btn.innerText = "Saving...";
+    
+    try {
+        const response = await fetch(`/api/bridges/${currentActiveBridge.db_id}/remarks`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ remarks: newRemarks })
         });
         
         if(response.ok) {
-            fetchDatabaseStats(); 
+            btn.innerText = "✅ Saved Successfully!";
+            fetchDatabaseStats(); // Refresh data quietly
+            setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
         } else {
-            alert("Failed to delete record.");
+            alert("Failed to save remarks to database.");
+            btn.innerText = "💾 Save Remarks";
         }
     } catch (e) {
-        console.error("Delete failed", e);
+        console.error("Save failed", e);
+        btn.innerText = "💾 Save Remarks";
     }
 }
+
 
 // --- RENDERING UI: LEVEL 1 (ANALYTICS & LIST) ---
 function renderAnalytics(stats) {
     document.getElementById('totalBridgesValue').innerText = stats.total_bridges;
     document.getElementById('totalDefectsValue').innerText = stats.total_defects;
 
-    // --- CIVIL ENGINEERING HEALTH ALGORITHM ---
     let healthCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
 
     liveBridgeData.forEach(bridge => {
         const imgs = bridge.images || [];
         if (imgs.length === 0) {
-            healthCounts['Fair']++; // No defects detected = Fair/Good
+            healthCounts['Fair']++; 
             return;
         }
 
-        // 1. Group images by mission to find the latest flight
         const missions = {};
         imgs.forEach(img => {
             const mId = img.mission_id || 0;
@@ -127,14 +147,13 @@ function renderAnalytics(stats) {
         const latestMissionId = Math.max(...Object.keys(missions).map(Number));
         const latestImages = missions[latestMissionId];
 
-        // 2. Worst-Case Aggregation: Find the worst defect in the latest mission
         let bridgeHealth = 'Fair'; 
         for (let img of latestImages) {
             let sev = img.severity || 'Fair';
-            if (sev === 'Bad' || sev === 'Critical') {
+            if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
                 bridgeHealth = 'Bad';
-                break; // Max severity reached, stop checking
-            } else if (sev === 'Poor' || sev === 'High') {
+                break; 
+            } else if (sev === 'Poor' || sev === 'Review Needed') {
                 bridgeHealth = 'Poor';
             }
         }
@@ -181,7 +200,7 @@ function renderBridges(bridges) {
     });
 }
 
-// --- RENDERING UI: LEVEL 2 (BRIDGE DETAILS & MISSION LIST) ---
+// --- RENDERING UI: LEVEL 2 (BRIDGE DETAILS) ---
 function showBridgeList() {
     currentActiveBridge = null;
     currentActiveMission = null;
@@ -201,18 +220,78 @@ function showBridgeDetails(bridge) {
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
-    // Render Overall Chart for Bridge (Historical)
-    let labels = [], chartData = [], colors = [];
+    // --- NEW: CALCULATE BRIDGE CONDITION & REMARKS ---
+    let bridgeHealth = 'Fair'; 
+    const imgs = bridge.images || [];
+    
+    if (imgs.length > 0) {
+        const missions = {};
+        imgs.forEach(img => {
+            const mId = img.mission_id || 0;
+            if (!missions[mId]) missions[mId] = [];
+            missions[mId].push(img);
+        });
+
+        const latestMissionId = Math.max(...Object.keys(missions).map(Number));
+        const latestImages = missions[latestMissionId];
+
+        for (let img of latestImages) {
+            let sev = img.severity || 'Fair';
+            if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
+                bridgeHealth = 'Bad';
+                break;
+            } else if (sev === 'Poor' || sev === 'Review Needed') {
+                bridgeHealth = 'Poor';
+            }
+        }
+    }
+
+    // Set the Condition Badge UI
+    const badge = document.getElementById('bridgeConditionBadge');
+    if (bridgeHealth === 'Bad') {
+        badge.className = 'status-badge status-bad';
+        badge.innerHTML = '🚨 Condition: BAD (Critical)';
+    } else if (bridgeHealth === 'Poor') {
+        badge.className = 'status-badge status-poor';
+        badge.innerHTML = '⚠️ Condition: POOR (Monitor)';
+    } else {
+        badge.className = 'status-badge status-fair';
+        badge.innerHTML = '✅ Condition: FAIR (Safe)';
+    }
+
+    // Set the Remarks (Load from DB, or Auto-Generate)
+    let autoRemark = "";
+    if (bridgeHealth === 'Bad') {
+        autoRemark = "CRITICAL CONDITION: Severe structural anomalies detected in the latest flight mission. Immediate physical engineering review, load restriction, or repair maintenance is highly recommended.";
+    } else if (bridgeHealth === 'Poor') {
+        autoRemark = "MODERATE DETERIORATION: Several structural defects logged. Continued monitoring is required. Schedule preventative maintenance for specific spans.";
+    } else {
+        autoRemark = "SAFE CONDITION: Structure is displaying normal wear. No critical defects detected. Continue standard drone inspection schedule.";
+    }
+    
+    document.getElementById('bridgeRemarks').value = bridge.remarks || autoRemark;
+
+    // --- Render Overall Chart ---
+    let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
     if(bridge.defects) {
         bridge.defects.forEach(item => {
             let severity = item[0] || 'Fair';
-            labels.push(severity); 
-            chartData.push(item[1]);
-            
-            if (severity === 'Bad' || severity === 'Critical') colors.push('#ef4444');
-            else if (severity === 'Fair' || severity === 'Low') colors.push('#10b981');
-            else colors.push('#f59e0b'); // Poor
+            let count = item[1];
+            if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad'] += count;
+            else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor'] += count;
+            else severityCounts['Fair'] += count;
         });
+    }
+
+    let labels = [], chartData = [], colors = [];
+    for (const [sev, count] of Object.entries(severityCounts)) {
+        if(count > 0) {
+            labels.push(sev);
+            chartData.push(count);
+            if (sev === 'Bad') colors.push('#ef4444');
+            else if (sev === 'Fair') colors.push('#10b981');
+            else colors.push('#f59e0b'); 
+        }
     }
 
     const ctx = document.getElementById('defectChart').getContext('2d');
@@ -224,7 +303,7 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // Generate Mission Cards
+    // --- Generate Mission Cards ---
     const imgList = bridge.images || [];
     const groupedByMission = {};
     imgList.forEach(img => {
@@ -250,7 +329,7 @@ function showBridgeDetails(bridge) {
             ? new Date(mImgs[0].date || mImgs[0].captured_at).toLocaleDateString() 
             : 'Recent';
 
-        const urgentCount = mImgs.filter(i => i.severity === 'Bad' || i.severity === 'Critical').length;
+        const urgentCount = mImgs.filter(i => i.severity === 'Bad' || i.severity === 'Critical' || i.severity === 'High').length;
         const urgentBadge = urgentCount > 0 ? `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>` : '';
 
         const card = document.createElement('div');
@@ -291,9 +370,9 @@ function showMissionDetails(missionId) {
     let severityCounts = { 'Bad':0, 'Poor':0, 'Fair':0 };
     missionImages.forEach(img => {
         let s = img.severity || 'Fair';
-        if (s === 'Critical') s = 'Bad'; // Backwards compatibility for old records
-        if (severityCounts[s] !== undefined) severityCounts[s]++;
-        else severityCounts['Poor']++; 
+        if (s === 'Critical' || s === 'High' || s === 'Bad') severityCounts['Bad']++;
+        else if (s === 'Review Needed' || s === 'Poor') severityCounts['Poor']++;
+        else severityCounts['Fair']++; 
     });
 
     let labels = [], chartData = [], colors = [];
@@ -377,7 +456,6 @@ function renderImageGallery(images) {
             const imgSrc = rawUrl.startsWith('http') ? rawUrl : 'https://via.placeholder.com/300x200?text=No+Image+Available';
             const defectType = img.defect_type || img.type || 'Unknown Defect';
             
-            // Upgrade backwards compatibility for older tests
             let defectSeverity = img.severity || 'Fair';
             if (defectSeverity === 'Critical' || defectSeverity === 'High') defectSeverity = 'Bad';
             if (defectSeverity === 'Review Needed') defectSeverity = 'Poor';
@@ -406,7 +484,7 @@ function renderImageGallery(images) {
                             <option value="Poor" ${defectSeverity === 'Poor' ? 'selected' : ''}>Poor</option>
                             <option value="Fair" ${defectSeverity === 'Fair' ? 'selected' : ''}>Fair</option>
                         </select>
-                        <button class=\"btn btn-danger\" style=\"padding: 5px 10px; font-size: 12px;\" onclick=\"deleteDefect(${defectId})\">🗑️ Delete</button>
+                        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${defectId})">🗑️ Delete</button>
                     </div>
                 </div>
             `;

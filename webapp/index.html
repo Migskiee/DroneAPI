@@ -23,7 +23,7 @@
                 <h2 class="section-title">SYSTEM ANALYTICS</h2>
                 <div class="analytics-top-row">
                     <div class="analytics-chart-panel">
-                        <h3>Overall Bridge Health Status</h3>
+                        <h3>Overall Bridge Health Status (EASTERN SAMAR BRIDGES)</h3>
                         <div class="global-chart-container">
                             <canvas id="globalConditionChart"></canvas>
                         </div>
@@ -60,7 +60,6 @@
             </section>
 
             <section id="bridges" class="content-section" style="display:none;">
-                
                 <div id="bridgeListView">
                     <div class="bridge-header-bar">
                         <h2 class="section-title">BRIDGE DATABASE</h2>
@@ -76,21 +75,31 @@
                         <p id="detailLocation" class="text-muted">Loading...</p>
                         <span id="detailId" class="badge badge-online">ID</span>
                     </div>
+                    
                     <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
                         
-                        <div class="detail-analytics" style="width: 100%;">
-                            <h3>Overall Defect Distribution (All Missions)</h3>
-                            <p class="text-muted">Historical aggregation of all defects detected on this structure.</p>
-                            <div class="chart-container">
-                                <canvas id="defectChart"></canvas>
+                        <div class="bridge-overview-row">
+                            <div class="detail-analytics chart-section">
+                                <h3>Overall Defect Distribution (All Missions)</h3>
+                                <p class="text-muted">Historical aggregation of all defects detected on this structure.</p>
+                                <div class="chart-container">
+                                    <canvas id="defectChart"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="detail-analytics remarks-section">
+                                <h3>Structure Condition & Remarks</h3>
+                                <div id="bridgeConditionBadge" class="status-badge">Loading...</div>
+                                <p class="text-muted" style="margin-bottom: 5px; font-size: 13px;">Engineering Remarks:</p>
+                                <textarea id="bridgeRemarks" class="form-control" rows="6" placeholder="Loading remarks..."></textarea>
+                                <button class="btn btn-primary" style="margin-top: 15px; width: 100%;" onclick="saveBridgeRemarks()">💾 Save Remarks</button>
                             </div>
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
                             <h3>Flight Mission Logs</h3>
                             <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
-                            <div id="missionListGrid" class="mission-grid">
-                            </div>
+                            <div id="missionListGrid" class="mission-grid"></div>
                         </div>
                     </div>
                 </div>
