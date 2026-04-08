@@ -23,7 +23,7 @@
                 <h2 class="section-title">SYSTEM ANALYTICS</h2>
                 <div class="analytics-top-row">
                     <div class="analytics-chart-panel">
-                        <h3>Overall Bridge Health Status (EASTERN SAMAR BRIDGES)</h3>
+                        <h3>Overall Bridge Health Status</h3>
                         <div class="global-chart-container">
                             <canvas id="globalConditionChart"></canvas>
                         </div>
@@ -80,8 +80,8 @@
                         
                         <div class="bridge-overview-row">
                             <div class="detail-analytics chart-section">
-                                <h3>Overall Defect Distribution (All Missions)</h3>
-                                <p class="text-muted">Historical aggregation of all defects detected on this structure.</p>
+                                <h3>Latest Mission Defect Distribution</h3>
+                                <p class="text-muted" id="latestMissionChartDesc">Defect breakdown from the most recent flight.</p>
                                 <div class="chart-container">
                                     <canvas id="defectChart"></canvas>
                                 </div>
@@ -97,7 +97,7 @@
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
-                            <h3>Flight Mission Logs</h3>
+                            <h3>Historical Flight Mission Logs</h3>
                             <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
                             <div id="missionListGrid" class="mission-grid"></div>
                         </div>

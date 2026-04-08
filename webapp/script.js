@@ -93,7 +93,6 @@ async function deleteDefect(defectId) {
     } catch (e) { console.error("Delete failed", e); }
 }
 
-// NEW: Save Remarks to Database
 async function saveBridgeRemarks() {
     if (!currentActiveBridge) return;
     
@@ -110,7 +109,7 @@ async function saveBridgeRemarks() {
         
         if(response.ok) {
             btn.innerText = "✅ Saved Successfully!";
-            fetchDatabaseStats(); // Refresh data quietly
+            fetchDatabaseStats(); 
             setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
         } else {
             alert("Failed to save remarks to database.");
@@ -121,7 +120,6 @@ async function saveBridgeRemarks() {
         btn.innerText = "💾 Save Remarks";
     }
 }
-
 
 // --- RENDERING UI: LEVEL 1 (ANALYTICS & LIST) ---
 function renderAnalytics(stats) {
@@ -220,9 +218,11 @@ function showBridgeDetails(bridge) {
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
-    // --- NEW: CALCULATE BRIDGE CONDITION & REMARKS ---
+    // 1. EXTRACT ONLY THE LATEST MISSION IMAGES
     let bridgeHealth = 'Fair'; 
     const imgs = bridge.images || [];
+    let latestImages = [];
+    let latestMissionIdLabel = 'Unknown';
     
     if (imgs.length > 0) {
         const missions = {};
@@ -233,8 +233,10 @@ function showBridgeDetails(bridge) {
         });
 
         const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-        const latestImages = missions[latestMissionId];
+        latestImages = missions[latestMissionId];
+        latestMissionIdLabel = latestMissionId === 0 ? 'Unassigned' : latestMissionId;
 
+        // Health Calculation
         for (let img of latestImages) {
             let sev = img.severity || 'Fair';
             if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
@@ -246,7 +248,13 @@ function showBridgeDetails(bridge) {
         }
     }
 
-    // Set the Condition Badge UI
+    // Set dynamic description text for the chart
+    const descElement = document.getElementById('latestMissionChartDesc');
+    if(descElement) {
+        descElement.innerText = imgs.length > 0 ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
+    }
+
+    // 2. SET BADGE AND REMARKS
     const badge = document.getElementById('bridgeConditionBadge');
     if (bridgeHealth === 'Bad') {
         badge.className = 'status-badge status-bad';
@@ -259,7 +267,6 @@ function showBridgeDetails(bridge) {
         badge.innerHTML = '✅ Condition: FAIR (Safe)';
     }
 
-    // Set the Remarks (Load from DB, or Auto-Generate)
     let autoRemark = "";
     if (bridgeHealth === 'Bad') {
         autoRemark = "CRITICAL CONDITION: Severe structural anomalies detected in the latest flight mission. Immediate physical engineering review, load restriction, or repair maintenance is highly recommended.";
@@ -271,17 +278,15 @@ function showBridgeDetails(bridge) {
     
     document.getElementById('bridgeRemarks').value = bridge.remarks || autoRemark;
 
-    // --- Render Overall Chart ---
+    // 3. RENDER THE CHART USING ONLY LATEST IMAGES
     let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
-    if(bridge.defects) {
-        bridge.defects.forEach(item => {
-            let severity = item[0] || 'Fair';
-            let count = item[1];
-            if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad'] += count;
-            else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor'] += count;
-            else severityCounts['Fair'] += count;
-        });
-    }
+    
+    latestImages.forEach(img => {
+        let severity = img.severity || 'Fair';
+        if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
+        else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
+        else severityCounts['Fair']++; // Catches 'Fair', 'Low', or null
+    });
 
     let labels = [], chartData = [], colors = [];
     for (const [sev, count] of Object.entries(severityCounts)) {
@@ -303,10 +308,9 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // --- Generate Mission Cards ---
-    const imgList = bridge.images || [];
+    // 4. GENERATE HISTORICAL MISSION CARDS
     const groupedByMission = {};
-    imgList.forEach(img => {
+    imgs.forEach(img => {
         const mId = img.mission_id || 'Unassigned';
         if (!groupedByMission[mId]) groupedByMission[mId] = [];
         groupedByMission[mId].push(img);
