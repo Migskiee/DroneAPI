@@ -91,9 +91,23 @@
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
-                            <h3>Inspection Image Gallery</h3>
-                            <p class="text-muted">Manage anomalies captured by the field drone. Update severity levels or delete false positives.</p>
-                            <div id="imageGalleryGrid" class="image-gallery-grid">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
+                                <div>
+                                    <h3>Inspection Image Gallery</h3>
+                                    <p class="text-muted" style="margin-bottom: 0;">Viewing structural anomalies grouped by flight mission and span.</p>
+                                </div>
+                                
+                                <div class="gallery-filters">
+                                    <select id="filterMission" class="form-control filter-select" onchange="applyGalleryFilters()">
+                                        <option value="all">All Missions</option>
+                                    </select>
+                                    <select id="filterType" class="form-control filter-select" onchange="applyGalleryFilters()">
+                                        <option value="all">All Defect Types</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div id="galleryContainer">
                             </div>
                         </div>
 

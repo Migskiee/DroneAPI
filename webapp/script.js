@@ -197,44 +197,142 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // 2. Render CRUD Image Gallery
-    const galleryGrid = document.getElementById('imageGalleryGrid');
-    galleryGrid.innerHTML = '';
+    // 2. Initialize Filters and Render Gallery
+    populateGalleryFilters(bridge.images);
     
-    if (!bridge.images || bridge.images.length === 0) {
-        galleryGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No inspection images captured for this structure yet.</p>';
-        return;
-    }
-
-    bridge.images.forEach(img => {
-        // Fallback for placeholder images if URL is missing/malformed
-        let imgSrc = (img.url && img.url.startsWith('http')) ? img.url : 'https://via.placeholder.com/300x200?text=No+Image+Available';
-        let dateStr = new Date(img.date).toLocaleString();
-        
-        const card = document.createElement('div');
-        card.className = 'gallery-card';
-        card.innerHTML = `
-            <img src="${imgSrc}" class="gallery-img" alt="Defect">
-            <div class="gallery-info">
-                <p><strong>${img.span}</strong> | ${img.type}</p>
-                <p class="text-muted" style="font-size: 11px;">${dateStr}</p>
-                <div class="crud-controls">
-                    <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${img.id}, this)">
-                        <option value="Critical" ${img.severity === 'Critical' ? 'selected' : ''}>Critical</option>
-                        <option value="High" ${img.severity === 'High' ? 'selected' : ''}>High</option>
-                        <option value="Review Needed" ${img.severity === 'Review Needed' || !img.severity ? 'selected' : ''}>Review Needed</option>
-                        <option value="Low" ${img.severity === 'Low' ? 'selected' : ''}>Low / Safe</option>
-                    </select>
-                    <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${img.id})">🗑️ Delete</button>
-                </div>
-            </div>
-        `;
-        galleryGrid.appendChild(card);
-    });
+    // Auto-apply filters to show the default mission immediately
+    applyGalleryFilters();
 }
 
 function showBridgeList() {
     currentActiveBridge = null;
     document.getElementById('bridgeListView').style.display = 'block';
     document.getElementById('bridgeDetailView').style.display = 'none';
+}
+
+// --- DYNAMIC MISSION AND SPAN GROUPING LOGIC ---
+function populateGalleryFilters(images) {
+    const missionFilter = document.getElementById('filterMission');
+    const typeFilter = document.getElementById('filterType');
+    
+    // Reset to defaults
+    missionFilter.innerHTML = '<option value="all">All Missions</option>';
+    typeFilter.innerHTML = '<option value="all">All Defect Types</option>';
+
+    if (!images || images.length === 0) return;
+
+    // Extract unique missions and types
+    const uniqueMissions = [...new Set(images.map(img => img.mission_id || 'Unknown'))].sort((a,b) => b - a);
+    const uniqueTypes = [...new Set(images.map(img => img.type))].sort();
+
+    // Populate Mission Dropdown
+    uniqueMissions.forEach(m => {
+        const label = m === 'Unknown' ? 'Unassigned Captures' : `Mission #${m}`;
+        missionFilter.innerHTML += `<option value="${m}">${label}</option>`;
+    });
+    
+    // Populate Defect Type Dropdown
+    uniqueTypes.forEach(type => {
+        typeFilter.innerHTML += `<option value="${type}">${type}</option>`;
+    });
+
+    // Automatically pre-select the most recent mission so the user isn't overwhelmed
+    if (uniqueMissions.length > 0 && uniqueMissions[0] !== 'Unknown') {
+        missionFilter.value = uniqueMissions[0];
+    }
+}
+
+function applyGalleryFilters() {
+    if (!currentActiveBridge || !currentActiveBridge.images) return;
+
+    const selectedMission = document.getElementById('filterMission').value;
+    const selectedType = document.getElementById('filterType').value;
+
+    // Filter the images array based on dropdowns
+    const filteredImages = currentActiveBridge.images.filter(img => {
+        const imgMission = String(img.mission_id || 'Unknown');
+        const matchMission = selectedMission === 'all' || imgMission === selectedMission;
+        const matchType = selectedType === 'all' || img.type === selectedType;
+        return matchMission && matchType;
+    });
+
+    renderImageGallery(filteredImages);
+}
+
+function renderImageGallery(images) {
+    const container = document.getElementById('galleryContainer');
+    container.innerHTML = '';
+    
+    if (!images || images.length === 0) {
+        container.innerHTML = '<p class="text-muted">No images match your current filters.</p>';
+        return;
+    }
+
+    // 1. Group the filtered images by Span
+    const groupedBySpan = {};
+    images.forEach(img => {
+        const span = img.span || 'Unknown Span';
+        if (!groupedBySpan[span]) groupedBySpan[span] = [];
+        groupedBySpan[span].push(img);
+    });
+
+    // 2. Sort spans naturally (e.g. Span 1, Span 2, Span 10)
+    const sortedSpans = Object.keys(groupedBySpan).sort((a, b) => {
+        const numA = parseInt(a.replace(/[^\d]/g, '')) || 0;
+        const numB = parseInt(b.replace(/[^\d]/g, '')) || 0;
+        return numA - numB;
+    });
+
+    // 3. Render a separated Grid for each Span
+    sortedSpans.forEach(span => {
+        const spanImages = groupedBySpan[span];
+        
+        // Create the Span wrapper
+        const spanGroup = document.createElement('div');
+        spanGroup.className = 'span-group';
+        
+        // Create the Span Title Header
+        const spanTitle = document.createElement('h4');
+        spanTitle.className = 'span-group-title';
+        spanTitle.innerHTML = `📍 ${span} <span class="badge badge-online" style="margin-left:10px; background:#e2e8f0; color:#475569;">${spanImages.length} Images</span>`;
+        spanGroup.appendChild(spanTitle);
+
+        // Create the inner Grid
+        const grid = document.createElement('div');
+        grid.className = 'image-gallery-grid';
+
+        // Add the cards to this specific grid
+        spanImages.forEach(img => {
+            let imgSrc = (img.url && img.url.startsWith('http')) ? img.url : 'https://via.placeholder.com/300x200?text=No+Image+Available';
+            let dateStr = new Date(img.date).toLocaleString();
+            
+            const card = document.createElement('div');
+            card.className = 'gallery-card';
+            
+            // ---> UI UPGRADE: Added prominent Defect Type Display here <---
+            card.innerHTML = `
+                <img src="${imgSrc}" class="gallery-img" alt="Defect">
+                <div class="gallery-info">
+                    <p style="font-size: 14px; margin-bottom: 6px;">
+                        <strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${img.type}</strong>
+                    </p>
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
+                    
+                    <div class="crud-controls">
+                        <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${img.id}, this)">
+                            <option value="Critical" ${img.severity === 'Critical' ? 'selected' : ''}>Critical</option>
+                            <option value="High" ${img.severity === 'High' ? 'selected' : ''}>High</option>
+                            <option value="Review Needed" ${img.severity === 'Review Needed' || !img.severity ? 'selected' : ''}>Review Needed</option>
+                            <option value="Low" ${img.severity === 'Low' ? 'selected' : ''}>Low / Safe</option>
+                        </select>
+                        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${img.id})">🗑️ Delete</button>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+
+        spanGroup.appendChild(grid);
+        container.appendChild(spanGroup);
+    });
 }
