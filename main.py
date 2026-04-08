@@ -2,7 +2,7 @@ import os
 import psycopg2
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel # NEW: Required for reading incoming JSON updates
+from pydantic import BaseModel 
 import cloudinary
 import cloudinary.uploader
 import uvicorn
@@ -58,9 +58,10 @@ def get_bridge_data():
             """, (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            # 2. NEW: Fetch Actual Image Records for the Gallery
+            # 2. Fetch Actual Image Records for the Gallery
+            # --- FIXED: Added captured_images.mission_id to the SELECT query ---
             cursor.execute("""
-                SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url 
+                SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id
                 FROM captured_images 
                 JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id
                 WHERE inspection_missions.bridge_id = %s
@@ -76,7 +77,8 @@ def get_bridge_data():
                     "type": img[2],
                     "severity": img[3],
                     "date": img[4],
-                    "url": img[5]
+                    "url": img[5],
+                    "mission_id": img[6] # --- FIXED: Added mission_id so the frontend can group the images ---
                 })
 
             bridge_list.append({
