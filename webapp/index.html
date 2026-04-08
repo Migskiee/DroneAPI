@@ -18,9 +18,9 @@
 
     <div class="right-container">
         <main class="content">
+            
             <section id="analytics" class="content-section">
                 <h2 class="section-title">SYSTEM ANALYTICS</h2>
-                
                 <div class="analytics-top-row">
                     <div class="analytics-chart-panel">
                         <h3>Overall Defect Severity</h3>
@@ -28,7 +28,6 @@
                             <canvas id="globalConditionChart"></canvas>
                         </div>
                     </div>
-
                     <div class="analytics-details-panel">
                         <h3>Severity Breakdown</h3>
                         <p class="text-muted">Total number of AI-detected anomalies across all registered bridges.</p>
@@ -48,7 +47,6 @@
                         </ul>
                     </div>
                 </div>
-
                 <div class="analytics-summary-row">
                     <div class="summary-card">
                         <h4>Total Registered Bridges</h4>
@@ -62,6 +60,7 @@
             </section>
 
             <section id="bridges" class="content-section" style="display:none;">
+                
                 <div id="bridgeListView">
                     <div class="bridge-header-bar">
                         <h2 class="section-title">BRIDGE DATABASE</h2>
@@ -72,19 +71,43 @@
 
                 <div id="bridgeDetailView" style="display:none;">
                     <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to Database</button>
-
                     <div class="detail-header">
                         <h2 id="detailName">Loading...</h2>
                         <p id="detailLocation" class="text-muted">Loading...</p>
                         <span id="detailId" class="badge badge-online">ID</span>
                     </div>
-
                     <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
                         
                         <div class="detail-analytics" style="width: 100%;">
-                            <h3>Defect Distribution for this Bridge</h3>
+                            <h3>Overall Defect Distribution (All Missions)</h3>
+                            <p class="text-muted">Historical aggregation of all defects detected on this structure.</p>
                             <div class="chart-container">
                                 <canvas id="defectChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="detail-analytics" style="width: 100%;">
+                            <h3>Flight Mission Logs</h3>
+                            <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
+                            <div id="missionListGrid" class="mission-grid">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="missionDetailView" style="display:none;">
+                    <button class="btn btn-secondary" onclick="backToBridgeDetails()">← Back to Bridge Overview</button>
+                    <div class="detail-header">
+                        <h2 id="missionDetailTitle">Mission Data</h2>
+                        <p id="missionDetailSubtitle" class="text-muted">Loading...</p>
+                    </div>
+                    <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
+                        
+                        <div class="detail-analytics" style="width: 100%;">
+                            <h3>Mission Defect Distribution</h3>
+                            <p class="text-muted">Defect severity breakdown specific to this flight only.</p>
+                            <div class="chart-container" style="height: 250px;">
+                                <canvas id="missionDefectChart"></canvas>
                             </div>
                         </div>
 
@@ -92,9 +115,8 @@
                             <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
                                 <div>
                                     <h3>Inspection Image Gallery</h3>
-                                    <p class="text-muted" style="margin-bottom: 0;">Viewing structural anomalies grouped by flight mission and span.</p>
+                                    <p class="text-muted" style="margin-bottom: 0;">Grouped by structural span.</p>
                                 </div>
-                                
                                 <div class="gallery-filters">
                                     <select id="filterType" class="form-control filter-select" onchange="applyGalleryFilters()">
                                         <option value="all">All Defect Types</option>
@@ -106,11 +128,12 @@
                                     </select>
                                 </div>
                             </div>
-                            
                             <div id="galleryContainer"></div>
                         </div>
+
                     </div>
                 </div>
+
             </section>
         </main>
     </div>

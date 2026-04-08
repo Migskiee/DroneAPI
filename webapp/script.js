@@ -1,11 +1,12 @@
 // --- GLOBAL VARIABLES ---
 let globalChartInstance = null;
 let detailChartInstance = null;
+let missionChartInstance = null; // New chart tracker
 let liveBridgeData = []; 
 let currentActiveBridge = null;
+let currentActiveMission = null; // Tracks the currently viewed mission
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- NAVIGATION LOGIC ---
     const navLinks = document.querySelectorAll('.nav-link');
     const sections = document.querySelectorAll('.content-section');
 
@@ -22,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- SEARCH LOGIC ---
     document.getElementById('bridgeSearch').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
         const filtered = liveBridgeData.filter(bridge => 
@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBridges(filtered);
     });
 
-    // Fetch initial data when the page loads
     fetchDatabaseStats();
 });
 
@@ -46,10 +45,17 @@ async function fetchDatabaseStats() {
             renderAnalytics(data.stats);
             renderBridges(liveBridgeData);
             
-            // If the user is currently looking at a specific bridge, refresh its details dynamically
+            // Smart Refresh: Keeps you on the exact page you were on after deleting/updating
             if(currentActiveBridge) {
                 const refreshedBridge = liveBridgeData.find(b => b.db_id === currentActiveBridge.db_id);
-                if(refreshedBridge) showBridgeDetails(refreshedBridge);
+                if(refreshedBridge) {
+                    currentActiveBridge = refreshedBridge;
+                    if(currentActiveMission) {
+                        showMissionDetails(currentActiveMission);
+                    } else {
+                        showBridgeDetails(refreshedBridge);
+                    }
+                }
             }
         } else {
             console.error("API Error:", data.message);
@@ -70,7 +76,7 @@ async function updateDefectSeverity(defectId, dropdownElement) {
         });
         
         if(response.ok) {
-            fetchDatabaseStats(); // Refresh the charts and gallery with the new data
+            fetchDatabaseStats(); 
         } else {
             alert("Failed to update severity.");
         }
@@ -88,7 +94,7 @@ async function deleteDefect(defectId) {
         });
         
         if(response.ok) {
-            fetchDatabaseStats(); // Refresh the UI after deletion
+            fetchDatabaseStats(); 
         } else {
             alert("Failed to delete record.");
         }
@@ -97,7 +103,7 @@ async function deleteDefect(defectId) {
     }
 }
 
-// --- RENDERING UI ---
+// --- RENDERING UI: LEVEL 1 (ANALYTICS & LIST) ---
 function renderAnalytics(stats) {
     document.getElementById('totalBridgesValue').innerText = stats.total_bridges;
     document.getElementById('totalDefectsValue').innerText = stats.total_defects;
@@ -112,18 +118,9 @@ function renderAnalytics(stats) {
         labels.push(severity);
         chartData.push(count);
 
-        if (severity === 'High' || severity === 'Critical') { 
-            high += count; 
-            colors.push('#ef4444'); 
-        }
-        else if (severity === 'Low') { 
-            low += count; 
-            colors.push('#10b981'); 
-        }
-        else { 
-            review += count; 
-            colors.push('#f59e0b'); 
-        }
+        if (severity === 'High' || severity === 'Critical') { high += count; colors.push('#ef4444'); }
+        else if (severity === 'Low') { low += count; colors.push('#10b981'); }
+        else { review += count; colors.push('#f59e0b'); }
     });
 
     document.getElementById('countHigh').innerText = high;
@@ -135,16 +132,8 @@ function renderAnalytics(stats) {
     
     globalChartInstance = new Chart(ctx, {
         type: 'doughnut',
-        data: { 
-            labels: labels, 
-            datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 0 }] 
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { legend: { position: 'right' } }, 
-            cutout: '65%' 
-        }
+        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '65%' }
     });
 }
 
@@ -167,16 +156,27 @@ function renderBridges(bridges) {
     });
 }
 
+// --- RENDERING UI: LEVEL 2 (BRIDGE DETAILS & MISSION LIST) ---
+function showBridgeList() {
+    currentActiveBridge = null;
+    currentActiveMission = null;
+    document.getElementById('bridgeListView').style.display = 'block';
+    document.getElementById('bridgeDetailView').style.display = 'none';
+    document.getElementById('missionDetailView').style.display = 'none';
+}
+
 function showBridgeDetails(bridge) {
     currentActiveBridge = bridge;
+    currentActiveMission = null;
     document.getElementById('bridgeListView').style.display = 'none';
+    document.getElementById('missionDetailView').style.display = 'none';
     document.getElementById('bridgeDetailView').style.display = 'block';
 
     document.getElementById('detailName').innerText = bridge.name;
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
-    // Render Defect Chart for this specific bridge
+    // Render Overall Chart for Bridge
     let labels = [], chartData = [], colors = [];
     if(bridge.defects) {
         bridge.defects.forEach(item => {
@@ -199,36 +199,119 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // Reset filter and draw the Gallery
-    document.getElementById('filterType').value = 'all';
-    applyGalleryFilters();
-}
+    // Generate Mission Cards
+    const imgList = bridge.images || [];
+    const groupedByMission = {};
+    imgList.forEach(img => {
+        const mId = img.mission_id || 'Unassigned';
+        if (!groupedByMission[mId]) groupedByMission[mId] = [];
+        groupedByMission[mId].push(img);
+    });
 
-function showBridgeList() {
-    currentActiveBridge = null;
-    document.getElementById('bridgeListView').style.display = 'block';
-    document.getElementById('bridgeDetailView').style.display = 'none';
-}
+    const missionGrid = document.getElementById('missionListGrid');
+    missionGrid.innerHTML = '';
 
-// --- DYNAMIC MISSION AND SPAN GROUPING LOGIC ---
-function applyGalleryFilters() {
-    if (!currentActiveBridge) return;
-
-    // Safety check: Backend might send the array as 'images' or 'defects'
-    const imgList = currentActiveBridge.images || currentActiveBridge.defects || [];
-    
-    if (imgList.length === 0) {
-        document.getElementById('galleryContainer').innerHTML = '<p class="text-muted">No images found for this bridge.</p>';
+    if (Object.keys(groupedByMission).length === 0) {
+        missionGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No flight missions logged for this bridge yet.</p>';
         return;
     }
 
-    const selectedType = document.getElementById('filterType').value;
+    // Sort newest mission first
+    const sortedMissions = Object.keys(groupedByMission).sort((a,b) => b - a);
 
-    // Filter images based on the explicit Defect Type dropdown
-    const filteredImages = imgList.filter(img => {
-        // Robust check for database column name 'defect_type' vs API name 'type'
-        const imgType = img.defect_type || img.type || 'Unknown';
-        return selectedType === 'all' || imgType === selectedType;
+    sortedMissions.forEach(mId => {
+        const mImgs = groupedByMission[mId];
+        const label = mId === 'Unassigned' ? 'Unassigned Captures' : `Mission #${mId}`;
+        const dateStr = mImgs[0] && (mImgs[0].date || mImgs[0].captured_at) 
+            ? new Date(mImgs[0].date || mImgs[0].captured_at).toLocaleDateString() 
+            : 'Recent';
+
+        // Calculate Critical/High defects for this specific mission card
+        const urgentCount = mImgs.filter(i => i.severity === 'Critical' || i.severity === 'High').length;
+        const urgentBadge = urgentCount > 0 ? `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Critical Issues</span>` : '';
+
+        const card = document.createElement('div');
+        card.className = 'mission-card';
+        card.onclick = () => showMissionDetails(mId);
+        card.innerHTML = `
+            <div>
+                <div class="mission-card-title">🚁 ${label}</div>
+                <div class="mission-card-subtitle">Flight Date: ${dateStr}</div>
+                ${urgentBadge}
+            </div>
+            <div class="mission-card-stats">
+                ${mImgs.length} Images
+            </div>
+        `;
+        missionGrid.appendChild(card);
+    });
+}
+
+// --- RENDERING UI: LEVEL 3 (SPECIFIC MISSION DETAILS) ---
+function backToBridgeDetails() {
+    // Just re-trigger the bridge view to return up one level
+    if(currentActiveBridge) showBridgeDetails(currentActiveBridge);
+}
+
+function showMissionDetails(missionId) {
+    currentActiveMission = missionId;
+    document.getElementById('bridgeDetailView').style.display = 'none';
+    document.getElementById('missionDetailView').style.display = 'block';
+
+    const missionLabel = missionId === 'Unassigned' ? 'Unassigned Captures' : `Flight Mission #${missionId}`;
+    document.getElementById('missionDetailTitle').innerText = missionLabel;
+
+    // Filter images down to JUST this mission
+    const allImages = currentActiveBridge.images || [];
+    const missionImages = allImages.filter(img => String(img.mission_id || 'Unassigned') === String(missionId));
+
+    document.getElementById('missionDetailSubtitle').innerText = `${missionImages.length} Data points captured for ${currentActiveBridge.name}`;
+
+    // 1. Render Specific Mission Chart
+    let severityCounts = { 'Critical':0, 'High':0, 'Review Needed':0, 'Low':0 };
+    missionImages.forEach(img => {
+        let s = img.severity || 'Review Needed';
+        if (severityCounts[s] !== undefined) severityCounts[s]++;
+        else severityCounts['Review Needed']++; // Fallback
+    });
+
+    let labels = [], chartData = [], colors = [];
+    for (const [sev, count] of Object.entries(severityCounts)) {
+        if(count > 0) {
+            labels.push(sev);
+            chartData.push(count);
+            if (sev === 'Critical' || sev === 'High') colors.push('#ef4444');
+            else if (sev === 'Low') colors.push('#10b981');
+            else colors.push('#f59e0b');
+        }
+    }
+
+    const ctx = document.getElementById('missionDefectChart').getContext('2d');
+    if (missionChartInstance) missionChartInstance.destroy();
+    
+    missionChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '50%' }
+    });
+
+    // 2. Trigger the gallery render
+    document.getElementById('filterType').value = 'all'; // Reset filter when entering mission
+    applyGalleryFilters();
+}
+
+function applyGalleryFilters() {
+    if (!currentActiveBridge || !currentActiveMission) return;
+
+    // Get images ONLY for the currently viewed mission
+    const allImages = currentActiveBridge.images || [];
+    const missionImages = allImages.filter(img => String(img.mission_id || 'Unassigned') === String(currentActiveMission));
+
+    const selectedType = document.getElementById('filterType').value.toLowerCase();
+
+    const filteredImages = missionImages.filter(img => {
+        const imgType = (img.defect_type || img.type || 'Unknown').toLowerCase();
+        return selectedType === 'all' || imgType.includes(selectedType);
     });
 
     renderImageGallery(filteredImages);
@@ -239,111 +322,76 @@ function renderImageGallery(images) {
     container.innerHTML = '';
     
     if (!images || images.length === 0) {
-        container.innerHTML = '<p class="text-muted">No images match your current filters.</p>';
+        container.innerHTML = '<p class="text-muted" style="padding: 20px; background: #fff; border-radius: 8px;">No images match your current filter.</p>';
         return;
     }
 
-    // 1. Group the filtered images by MISSION ID First
-    const groupedByMission = {};
+    // Because we are inside a mission, we only group by Span!
+    const groupedBySpan = {};
     images.forEach(img => {
-        const mId = img.mission_id || 'Unassigned';
-        if (!groupedByMission[mId]) groupedByMission[mId] = [];
-        groupedByMission[mId].push(img);
+        const span = img.span_target || img.span || 'Unknown Span';
+        if (!groupedBySpan[span]) groupedBySpan[span] = [];
+        groupedBySpan[span].push(img);
     });
 
-    // 2. Sort missions (newest first)
-    const sortedMissions = Object.keys(groupedByMission).sort((a,b) => b - a);
+    // Sort spans naturally (Span 1, Span 2...)
+    const sortedSpans = Object.keys(groupedBySpan).sort((a, b) => {
+        const numA = parseInt(a.replace(/[^\d]/g, '')) || 0;
+        const numB = parseInt(b.replace(/[^\d]/g, '')) || 0;
+        return numA - numB;
+    });
 
-    // 3. Loop through every Mission to build its container
-    sortedMissions.forEach(mission => {
-        const missionImages = groupedByMission[mission];
+    sortedSpans.forEach(span => {
+        const spanImages = groupedBySpan[span];
         
-        // Create the Mission wrapper
-        const missionDiv = document.createElement('div');
-        missionDiv.className = 'mission-group';
+        const spanGroup = document.createElement('div');
+        spanGroup.className = 'span-group';
         
-        // Create the Mission Header
-        const missionHeader = document.createElement('h3');
-        missionHeader.className = 'mission-header';
-        const missionLabel = mission === 'Unassigned' ? 'Unassigned Captures' : `Flight Mission #${mission}`;
-        missionHeader.innerHTML = `🚁 ${missionLabel} <span class="badge badge-online" style="margin-left:10px;">${missionImages.length} Captures</span>`;
-        missionDiv.appendChild(missionHeader);
+        const spanTitle = document.createElement('h4');
+        spanTitle.className = 'span-group-title';
+        spanTitle.innerHTML = `📍 ${span} <span class="badge badge-online" style="margin-left:10px; background:#e2e8f0; color:#475569;">${spanImages.length} Photos</span>`;
+        spanGroup.appendChild(spanTitle);
 
-        // --- SUB-GROUPING: Now group by Span inside this Mission ---
-        const groupedBySpan = {};
-        missionImages.forEach(img => {
-            // Robust check for database column name 'span_target'
-            const span = img.span_target || img.span || 'Unknown Span';
-            if (!groupedBySpan[span]) groupedBySpan[span] = [];
-            groupedBySpan[span].push(img);
-        });
+        const grid = document.createElement('div');
+        grid.className = 'image-gallery-grid';
 
-        // Sort spans naturally (Span 1, Span 2...)
-        const sortedSpans = Object.keys(groupedBySpan).sort((a, b) => {
-            const numA = parseInt(a.replace(/[^\d]/g, '')) || 0;
-            const numB = parseInt(b.replace(/[^\d]/g, '')) || 0;
-            return numA - numB;
-        });
-
-        // Render each Span Grid inside the Mission Div
-        sortedSpans.forEach(span => {
-            const spanImages = groupedBySpan[span];
+        spanImages.forEach(img => {
+            const rawUrl = img.image_url || img.url || '';
+            const imgSrc = rawUrl.startsWith('http') ? rawUrl : 'https://via.placeholder.com/300x200?text=No+Image+Available';
+            const defectType = img.defect_type || img.type || 'Unknown Defect';
+            const defectSeverity = img.severity || 'Review Needed';
+            const defectId = img.id || img.defect_id;
             
-            const spanGroup = document.createElement('div');
-            spanGroup.className = 'span-group';
+            let dateStr = 'Recent Capture';
+            if (img.date || img.created_at || img.captured_at) {
+                dateStr = new Date(img.date || img.created_at || img.captured_at).toLocaleString();
+            }
             
-            const spanTitle = document.createElement('h4');
-            spanTitle.className = 'span-group-title';
-            spanTitle.innerHTML = `📍 ${span}`;
-            spanGroup.appendChild(spanTitle);
-
-            const grid = document.createElement('div');
-            grid.className = 'image-gallery-grid';
-
-            spanImages.forEach(img => {
-                
-                // --- CRITICAL BUG FIX: Handling Backend DB Column Names Safely ---
-                const rawUrl = img.image_url || img.url || '';
-                const imgSrc = rawUrl.startsWith('http') ? rawUrl : 'https://via.placeholder.com/300x200?text=No+Image+Available';
-                
-                const defectType = img.defect_type || img.type || 'Unknown Defect';
-                const defectSeverity = img.severity || 'Review Needed';
-                const defectId = img.id || img.defect_id;
-                
-                let dateStr = 'Recent Capture';
-                if (img.date || img.created_at) {
-                    dateStr = new Date(img.date || img.created_at).toLocaleString();
-                }
-                
-                const card = document.createElement('div');
-                card.className = 'gallery-card';
-                card.innerHTML = `
-                    <img src="${imgSrc}" class="gallery-img" alt="Defect">
-                    <div class="gallery-info">
-                        <p style="font-size: 14px; margin-bottom: 6px;">
-                            <strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${defectType}</strong>
-                        </p>
-                        <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
-                        
-                        <div class="crud-controls">
-                            <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${defectId}, this)">
-                                <option value="Critical" ${defectSeverity === 'Critical' ? 'selected' : ''}>Critical</option>
-                                <option value="High" ${defectSeverity === 'High' ? 'selected' : ''}>High</option>
-                                <option value="Review Needed" ${defectSeverity === 'Review Needed' ? 'selected' : ''}>Review Needed</option>
-                                <option value="Low" ${defectSeverity === 'Low' ? 'selected' : ''}>Low / Safe</option>
-                            </select>
-                            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${defectId})">🗑️ Delete</button>
-                        </div>
+            const card = document.createElement('div');
+            card.className = 'gallery-card';
+            card.innerHTML = `
+                <img src="${imgSrc}" class="gallery-img" alt="Defect">
+                <div class="gallery-info">
+                    <p style="font-size: 14px; margin-bottom: 6px;">
+                        <strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${defectType}</strong>
+                    </p>
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
+                    
+                    <div class="crud-controls">
+                        <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${defectId}, this)">
+                            <option value="Critical" ${defectSeverity === 'Critical' ? 'selected' : ''}>Critical</option>
+                            <option value="High" ${defectSeverity === 'High' ? 'selected' : ''}>High</option>
+                            <option value="Review Needed" ${defectSeverity === 'Review Needed' ? 'selected' : ''}>Review Needed</option>
+                            <option value="Low" ${defectSeverity === 'Low' ? 'selected' : ''}>Low / Safe</option>
+                        </select>
+                        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${defectId})">🗑️ Delete</button>
                     </div>
-                `;
-                grid.appendChild(card);
-            });
-
-            spanGroup.appendChild(grid);
-            missionDiv.appendChild(spanGroup);
+                </div>
+            `;
+            grid.appendChild(card);
         });
 
-        // Finally, add the fully constructed Mission Div to the page
-        container.appendChild(missionDiv);
+        spanGroup.appendChild(grid);
+        container.appendChild(spanGroup);
     });
 }
