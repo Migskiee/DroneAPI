@@ -23,25 +23,25 @@
                 <h2 class="section-title">SYSTEM ANALYTICS</h2>
                 <div class="analytics-top-row">
                     <div class="analytics-chart-panel">
-                        <h3>Overall Defect Severity</h3>
+                        <h3>Overall Bridge Health Status</h3>
                         <div class="global-chart-container">
                             <canvas id="globalConditionChart"></canvas>
                         </div>
                     </div>
                     <div class="analytics-details-panel">
-                        <h3>Severity Breakdown</h3>
-                        <p class="text-muted">Total number of AI-detected anomalies across all registered bridges.</p>
+                        <h3>Health Condition Breakdown</h3>
+                        <p class="text-muted">Current structural condition of registered bridges based on their most recent flight mission.</p>
                         <ul class="condition-list stats-list">
                             <li>
-                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Critical / High</strong></div>
+                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Bad (Critical Repair Needed)</strong></div>
                                 <span class="stat-value" id="countHigh">0</span>
                             </li>
                             <li>
-                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Review Needed</strong></div>
+                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Poor (Requires Maintenance)</strong></div>
                                 <span class="stat-value" id="countReview">0</span>
                             </li>
                             <li>
-                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Low / Safe</strong></div>
+                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Fair / Good (Safe)</strong></div>
                                 <span class="stat-value" id="countLow">0</span>
                             </li>
                         </ul>
@@ -90,7 +90,7 @@
                             <h3>Flight Mission Logs</h3>
                             <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
                             <div id="missionListGrid" class="mission-grid">
-                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
