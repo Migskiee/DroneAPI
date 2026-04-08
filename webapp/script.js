@@ -176,17 +176,19 @@ function showBridgeDetails(bridge) {
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
-    // 1. Render Defect Chart for this specific bridge
+    // Render Defect Chart for this specific bridge
     let labels = [], chartData = [], colors = [];
-    bridge.defects.forEach(item => {
-        let severity = item[0] || 'Review Needed';
-        labels.push(severity); 
-        chartData.push(item[1]);
-        
-        if (severity === 'High' || severity === 'Critical') colors.push('#ef4444');
-        else if (severity === 'Low') colors.push('#10b981');
-        else colors.push('#f59e0b');
-    });
+    if(bridge.defects) {
+        bridge.defects.forEach(item => {
+            let severity = item[0] || 'Review Needed';
+            labels.push(severity); 
+            chartData.push(item[1]);
+            
+            if (severity === 'High' || severity === 'Critical') colors.push('#ef4444');
+            else if (severity === 'Low') colors.push('#10b981');
+            else colors.push('#f59e0b');
+        });
+    }
 
     const ctx = document.getElementById('defectChart').getContext('2d');
     if (detailChartInstance) detailChartInstance.destroy();
@@ -197,7 +199,7 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // 2. Draw the Gallery (automatically defaults to showing all types)
+    // Reset filter and draw the Gallery
     document.getElementById('filterType').value = 'all';
     applyGalleryFilters();
 }
@@ -210,13 +212,23 @@ function showBridgeList() {
 
 // --- DYNAMIC MISSION AND SPAN GROUPING LOGIC ---
 function applyGalleryFilters() {
-    if (!currentActiveBridge || !currentActiveBridge.images) return;
+    if (!currentActiveBridge) return;
+
+    // Safety check: Backend might send the array as 'images' or 'defects'
+    const imgList = currentActiveBridge.images || currentActiveBridge.defects || [];
+    
+    if (imgList.length === 0) {
+        document.getElementById('galleryContainer').innerHTML = '<p class="text-muted">No images found for this bridge.</p>';
+        return;
+    }
 
     const selectedType = document.getElementById('filterType').value;
 
     // Filter images based on the explicit Defect Type dropdown
-    const filteredImages = currentActiveBridge.images.filter(img => {
-        return selectedType === 'all' || img.type === selectedType;
+    const filteredImages = imgList.filter(img => {
+        // Robust check for database column name 'defect_type' vs API name 'type'
+        const imgType = img.defect_type || img.type || 'Unknown';
+        return selectedType === 'all' || imgType === selectedType;
     });
 
     renderImageGallery(filteredImages);
@@ -260,7 +272,8 @@ function renderImageGallery(images) {
         // --- SUB-GROUPING: Now group by Span inside this Mission ---
         const groupedBySpan = {};
         missionImages.forEach(img => {
-            const span = img.span || 'Unknown Span';
+            // Robust check for database column name 'span_target'
+            const span = img.span_target || img.span || 'Unknown Span';
             if (!groupedBySpan[span]) groupedBySpan[span] = [];
             groupedBySpan[span].push(img);
         });
@@ -288,8 +301,19 @@ function renderImageGallery(images) {
             grid.className = 'image-gallery-grid';
 
             spanImages.forEach(img => {
-                let imgSrc = (img.url && img.url.startsWith('http')) ? img.url : 'https://via.placeholder.com/300x200?text=No+Image+Available';
-                let dateStr = new Date(img.date).toLocaleString();
+                
+                // --- CRITICAL BUG FIX: Handling Backend DB Column Names Safely ---
+                const rawUrl = img.image_url || img.url || '';
+                const imgSrc = rawUrl.startsWith('http') ? rawUrl : 'https://via.placeholder.com/300x200?text=No+Image+Available';
+                
+                const defectType = img.defect_type || img.type || 'Unknown Defect';
+                const defectSeverity = img.severity || 'Review Needed';
+                const defectId = img.id || img.defect_id;
+                
+                let dateStr = 'Recent Capture';
+                if (img.date || img.created_at) {
+                    dateStr = new Date(img.date || img.created_at).toLocaleString();
+                }
                 
                 const card = document.createElement('div');
                 card.className = 'gallery-card';
@@ -297,18 +321,18 @@ function renderImageGallery(images) {
                     <img src="${imgSrc}" class="gallery-img" alt="Defect">
                     <div class="gallery-info">
                         <p style="font-size: 14px; margin-bottom: 6px;">
-                            <strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${img.type}</strong>
+                            <strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${defectType}</strong>
                         </p>
                         <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
                         
                         <div class="crud-controls">
-                            <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${img.id}, this)">
-                                <option value="Critical" ${img.severity === 'Critical' ? 'selected' : ''}>Critical</option>
-                                <option value="High" ${img.severity === 'High' ? 'selected' : ''}>High</option>
-                                <option value="Review Needed" ${img.severity === 'Review Needed' || !img.severity ? 'selected' : ''}>Review Needed</option>
-                                <option value="Low" ${img.severity === 'Low' ? 'selected' : ''}>Low / Safe</option>
+                            <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${defectId}, this)">
+                                <option value="Critical" ${defectSeverity === 'Critical' ? 'selected' : ''}>Critical</option>
+                                <option value="High" ${defectSeverity === 'High' ? 'selected' : ''}>High</option>
+                                <option value="Review Needed" ${defectSeverity === 'Review Needed' ? 'selected' : ''}>Review Needed</option>
+                                <option value="Low" ${defectSeverity === 'Low' ? 'selected' : ''}>Low / Safe</option>
                             </select>
-                            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${img.id})">🗑️ Delete</button>
+                            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${defectId})">🗑️ Delete</button>
                         </div>
                     </div>
                 `;
