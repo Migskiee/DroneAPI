@@ -17,16 +17,22 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .btn-secondary:hover { background-color: #e2e8f0; color: #0f172a; }
 .badge-online { background-color: #d1fae5; color: #047857; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; }
 
-/* --- Bridges Database --- */
+/* --- Bridges Database & Mini Badges --- */
 .bridge-header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
 .search-input { padding: 10px 15px; width: 300px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; outline: none; transition: border-color 0.2s; }
 .search-input:focus { border-color: #3b82f6; }
 .bridge-grid { display: flex; flex-direction: column; gap: 15px; }
 .bridge-card { background: white; padding: 20px 25px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
 .bridge-card:hover { transform: translateY(-2px); box-shadow: 0 8px 12px -3px rgba(0,0,0,0.1); border-color: #cbd5e1; }
-.bridge-info h3 { font-size: 18px; color: #1e293b; margin-bottom: 4px; }
+.bridge-info h3 { font-size: 18px; color: #1e293b; margin-bottom: 4px; display: flex; align-items: center; }
 .bridge-info p { font-size: 14px; color: #64748b; margin: 0; }
 .bridge-id { font-size: 13px; background: #eef2ff; color: #4f46e5; padding: 6px 12px; border-radius: 6px; font-weight: bold; white-space: nowrap; }
+
+/* Mini Health Badges for Bridge Cards */
+.health-badge { font-size: 11px; padding: 3px 8px; border-radius: 12px; margin-left: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-bad { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.badge-poor { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+.badge-fair { background: #d1fae5; color: #047857; border: 1px solid #6ee7b7; }
 
 /* Bridge Details */
 .detail-header { margin-bottom: 30px; }
@@ -86,7 +92,7 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .span-group:first-child { border-top: none; padding-top: 0; }
 .span-group-title { font-size: 18px; color: #1e293b; margin-bottom: 15px; display: flex; align-items: center; }
 
-/* --- NEW: REMARKS & CONDITION UI STYLING --- */
+/* --- REMARKS & CONDITION UI STYLING --- */
 .bridge-overview-row { display: flex; gap: 30px; margin-bottom: 0px; width: 100%; }
 .chart-section { flex: 3; }
 .remarks-section { flex: 2; display: flex; flex-direction: column; }

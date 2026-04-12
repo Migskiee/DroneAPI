@@ -145,21 +145,18 @@ function renderAnalytics(stats) {
         const latestMissionId = Math.max(...Object.keys(missions).map(Number));
         const latestImages = missions[latestMissionId];
 
-        // --- UPGRADED MAJOR VS MINOR DEFECT ALGORITHM ---
         let bridgeHealth = 'Fair'; 
         for (let img of latestImages) {
             let sev = img.severity || 'Fair';
             let defType = (img.defect_type || img.type || '').toLowerCase();
             
-            // Flag if the defect is highly structural
             let isMajor = defType.includes('crack') || defType.includes('rebar');
 
             if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
                 if (isMajor) {
                     bridgeHealth = 'Bad';
-                    break; // Immediate critical state
+                    break; 
                 } else {
-                    // It's a Bad surface defect (flaking, chipping, water). Cap impact at 'Poor'.
                     if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; 
                 }
             } else if (sev === 'Poor' || sev === 'Review Needed') {
@@ -195,12 +192,56 @@ function renderBridges(bridges) {
     bridgeGrid.innerHTML = ''; 
     
     bridges.forEach(bridge => {
+        // --- NEW: Calculate bridge health dynamically for the mini-badge! ---
+        let bridgeHealth = 'Fair';
+        const imgs = bridge.images || [];
+
+        if (imgs.length > 0) {
+            const missions = {};
+            imgs.forEach(img => {
+                const mId = img.mission_id || 0;
+                if (!missions[mId]) missions[mId] = [];
+                missions[mId].push(img);
+            });
+
+            const latestMissionId = Math.max(...Object.keys(missions).map(Number));
+            const latestImages = missions[latestMissionId];
+
+            for (let img of latestImages) {
+                let sev = img.severity || 'Fair';
+                let defType = (img.defect_type || img.type || '').toLowerCase();
+                let isMajor = defType.includes('crack') || defType.includes('rebar');
+
+                if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
+                    if (isMajor) {
+                        bridgeHealth = 'Bad';
+                        break;
+                    } else {
+                        if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
+                    }
+                } else if (sev === 'Poor' || sev === 'Review Needed') {
+                    if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
+                }
+            }
+        }
+
+        // --- Apply specific styles to the mini-badge based on health ---
+        let badgeClass = 'badge-fair';
+        let badgeText = 'Fair';
+        if (bridgeHealth === 'Bad') {
+            badgeClass = 'badge-bad';
+            badgeText = 'Bad';
+        } else if (bridgeHealth === 'Poor') {
+            badgeClass = 'badge-poor';
+            badgeText = 'Poor';
+        }
+
         const card = document.createElement('div');
         card.className = 'bridge-card';
         card.onclick = () => showBridgeDetails(bridge);
         card.innerHTML = `
             <div class="bridge-info">
-                <h3>${bridge.name}</h3>
+                <h3>${bridge.name} <span class="health-badge ${badgeClass}">${badgeText}</span></h3>
                 <p>${bridge.location}</p>
             </div>
             <span class="bridge-id">${bridge.id}</span>
@@ -246,7 +287,6 @@ function showBridgeDetails(bridge) {
         latestImages = missions[latestMissionId];
         latestMissionIdLabel = latestMissionId === 0 ? 'Unassigned' : latestMissionId;
 
-        // --- UPGRADED MAJOR VS MINOR DEFECT ALGORITHM ---
         for (let img of latestImages) {
             let sev = img.severity || 'Fair';
             let defType = (img.defect_type || img.type || '').toLowerCase();
