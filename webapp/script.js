@@ -145,14 +145,25 @@ function renderAnalytics(stats) {
         const latestMissionId = Math.max(...Object.keys(missions).map(Number));
         const latestImages = missions[latestMissionId];
 
+        // --- UPGRADED MAJOR VS MINOR DEFECT ALGORITHM ---
         let bridgeHealth = 'Fair'; 
         for (let img of latestImages) {
             let sev = img.severity || 'Fair';
+            let defType = (img.defect_type || img.type || '').toLowerCase();
+            
+            // Flag if the defect is highly structural
+            let isMajor = defType.includes('crack') || defType.includes('rebar');
+
             if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                bridgeHealth = 'Bad';
-                break; 
+                if (isMajor) {
+                    bridgeHealth = 'Bad';
+                    break; // Immediate critical state
+                } else {
+                    // It's a Bad surface defect (flaking, chipping, water). Cap impact at 'Poor'.
+                    if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; 
+                }
             } else if (sev === 'Poor' || sev === 'Review Needed') {
-                bridgeHealth = 'Poor';
+                if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
             }
         }
         healthCounts[bridgeHealth]++;
@@ -218,7 +229,6 @@ function showBridgeDetails(bridge) {
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
-    // 1. EXTRACT ONLY THE LATEST MISSION IMAGES
     let bridgeHealth = 'Fair'; 
     const imgs = bridge.images || [];
     let latestImages = [];
@@ -236,25 +246,30 @@ function showBridgeDetails(bridge) {
         latestImages = missions[latestMissionId];
         latestMissionIdLabel = latestMissionId === 0 ? 'Unassigned' : latestMissionId;
 
-        // Health Calculation
+        // --- UPGRADED MAJOR VS MINOR DEFECT ALGORITHM ---
         for (let img of latestImages) {
             let sev = img.severity || 'Fair';
+            let defType = (img.defect_type || img.type || '').toLowerCase();
+            let isMajor = defType.includes('crack') || defType.includes('rebar');
+
             if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                bridgeHealth = 'Bad';
-                break;
+                if (isMajor) {
+                    bridgeHealth = 'Bad';
+                    break;
+                } else {
+                    if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
+                }
             } else if (sev === 'Poor' || sev === 'Review Needed') {
-                bridgeHealth = 'Poor';
+                if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
             }
         }
     }
 
-    // Set dynamic description text for the chart
     const descElement = document.getElementById('latestMissionChartDesc');
     if(descElement) {
         descElement.innerText = imgs.length > 0 ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
     }
 
-    // 2. SET BADGE AND REMARKS
     const badge = document.getElementById('bridgeConditionBadge');
     if (bridgeHealth === 'Bad') {
         badge.className = 'status-badge status-bad';
@@ -269,23 +284,22 @@ function showBridgeDetails(bridge) {
 
     let autoRemark = "";
     if (bridgeHealth === 'Bad') {
-        autoRemark = "CRITICAL CONDITION: Severe structural anomalies detected in the latest flight mission. Immediate physical engineering review, load restriction, or repair maintenance is highly recommended.";
+        autoRemark = "CRITICAL CONDITION: Major structural anomalies (Cracks or Exposed Rebar) detected in the latest flight mission. Immediate physical engineering review, load restriction, or repair maintenance is highly recommended.";
     } else if (bridgeHealth === 'Poor') {
-        autoRemark = "MODERATE DETERIORATION: Several structural defects logged. Continued monitoring is required. Schedule preventative maintenance for specific spans.";
+        autoRemark = "MODERATE DETERIORATION: Moderate structural defects or severe surface anomalies (Flaking, Chipping, Water Infiltration) logged. Continued monitoring is required. Schedule preventative maintenance.";
     } else {
         autoRemark = "SAFE CONDITION: Structure is displaying normal wear. No critical defects detected. Continue standard drone inspection schedule.";
     }
     
     document.getElementById('bridgeRemarks').value = bridge.remarks || autoRemark;
 
-    // 3. RENDER THE CHART USING ONLY LATEST IMAGES
     let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
     
     latestImages.forEach(img => {
         let severity = img.severity || 'Fair';
         if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
         else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
-        else severityCounts['Fair']++; // Catches 'Fair', 'Low', or null
+        else severityCounts['Fair']++; 
     });
 
     let labels = [], chartData = [], colors = [];
@@ -308,7 +322,6 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // 4. GENERATE HISTORICAL MISSION CARDS
     const groupedByMission = {};
     imgs.forEach(img => {
         const mId = img.mission_id || 'Unassigned';
