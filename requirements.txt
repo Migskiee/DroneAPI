@@ -1,6 +1,8 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
 fastapi
 uvicorn
-paramiko
 opencv-python-headless
 requests
 cloudinary
@@ -8,3 +10,4 @@ psycopg2-binary
 ultralytics
 pydantic
 numpy
+paramiko
