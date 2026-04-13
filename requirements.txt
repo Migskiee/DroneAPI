@@ -5,3 +5,5 @@ opencv-python-headless
 requests
 cloudinary
 psycopg2-binary
+ultralytics
+pydantic
