@@ -7,3 +7,4 @@ cloudinary
 psycopg2-binary
 ultralytics
 pydantic
+numpy
