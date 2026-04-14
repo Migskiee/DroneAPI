@@ -11,6 +11,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
+from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
 
@@ -152,23 +153,27 @@ threading.Thread(target=ai_processing_worker, daemon=True).start()
 # ==========================================
 
 # --- 1. UPLINK: RECEIVE VIDEO FROM RASPBERRY PI ---
-@app.post("/api/uplink/frame")
-async def receive_drone_frame(request: Request):
-    frame_bytes = await request.body()
-    np_arr = np.frombuffer(frame_bytes, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    
-    if frame is not None:
-        with state_lock:
-            flight_state["latest_raw_frame"] = frame
+@app.websocket("/api/uplink/stream")
+async def websocket_uplink(websocket: WebSocket):
+    await websocket.accept()
+    print("Drone connected via High-Speed WebSocket!")
+    try:
+        while True:
+            # Receive raw bytes pouring in from the drone
+            frame_bytes = await websocket.receive_bytes()
             
-            # THE FIX: Always pass the video through if the AI is off OR if the AI model failed to load!
-            if not flight_state["is_active"] or model is None:
-                flight_state["latest_annotated_frame"] = frame
-                
-        return {"status": "received"}
-    return {"status": "error"}
-
+            # Decode and update the state
+            np_arr = np.frombuffer(frame_bytes, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            if frame is not None:
+                with state_lock:
+                    flight_state["latest_raw_frame"] = frame
+                    if not flight_state["is_active"] or model is None:
+                        flight_state["latest_annotated_frame"] = frame
+                        
+    except WebSocketDisconnect:
+        print("Drone WebSocket disconnected.")
 # --- 2. DOWNLINK: STREAM TO WEB DASHBOARD ---
 def get_standby_frame():
     # Creates a blank black image with yellow standby text
