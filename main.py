@@ -146,7 +146,12 @@ def ai_processing_worker():
 
 threading.Thread(target=ai_processing_worker, daemon=True).start()
 
-# --- UPLINK: RECEIVE VIDEO FROM RASPBERRY PI ---
+
+# ==========================================
+# UPLINK AND DOWNLINK (VIDEO STREAMING)
+# ==========================================
+
+# --- 1. UPLINK: RECEIVE VIDEO FROM RASPBERRY PI ---
 @app.post("/api/uplink/frame")
 async def receive_drone_frame(request: Request):
     frame_bytes = await request.body()
@@ -156,27 +161,41 @@ async def receive_drone_frame(request: Request):
     if frame is not None:
         with state_lock:
             flight_state["latest_raw_frame"] = frame
-            if not flight_state["is_active"]:
+            
+            # THE FIX: Always pass the video through if the AI is off OR if the AI model failed to load!
+            if not flight_state["is_active"] or model is None:
                 flight_state["latest_annotated_frame"] = frame
+                
         return {"status": "received"}
     return {"status": "error"}
 
-# --- DOWNLINK: STREAM TO WEB DASHBOARD ---
+# --- 2. DOWNLINK: STREAM TO WEB DASHBOARD ---
+def get_standby_frame():
+    # Creates a blank black image with yellow standby text
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    cv2.putText(frame, "AWAITING DRONE UPLINK...", (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+    return frame
+
 def generate_mjpeg_stream():
     while True:
         with state_lock:
             frame = flight_state["latest_annotated_frame"]
             
-        if frame is not None:
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame_bytes = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        # THE FIX: If the drone hasn't sent a frame yet, send the Standby screen
+        if frame is None:
+            frame = get_standby_frame()
+            
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
         time.sleep(0.1)
 
 @app.get("/video_feed")
 def video_feed():
     return StreamingResponse(generate_mjpeg_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+
 
 # ==========================================
 # FLIGHT CONTROL ENDPOINTS
