@@ -56,6 +56,20 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
+// --- NEW: LIGHTBOX PREVIEW LOGIC ---
+function openImagePreview(url) {
+    const modal = document.getElementById('imagePreviewModal');
+    const img = document.getElementById('previewImageSrc');
+    img.src = url;
+    modal.style.display = 'flex';
+}
+
+function closeImagePreview() {
+    document.getElementById('imagePreviewModal').style.display = 'none';
+    document.getElementById('previewImageSrc').src = '';
+}
+
+// --- CORE DATA FETCHING ---
 async function fetchDatabaseStats() {
     try {
         const response = await fetch('/api/bridge-data');
@@ -78,12 +92,8 @@ async function fetchDatabaseStats() {
                     }
                 }
             }
-        } else {
-            console.error("API Error:", data.message);
         }
-    } catch (error) {
-        console.error("Failed to connect to backend:", error);
-    }
+    } catch (error) { console.error("Failed to connect to backend:", error); }
 }
 
 function getBridgeHealth(bridge) {
@@ -178,7 +188,6 @@ async function updateDefectSeverity(defectId, dropdownElement) {
             body: JSON.stringify({ severity: newSeverity })
         });
         if(response.ok) fetchDatabaseStats(); 
-        else alert("Failed to update severity.");
     } catch (e) { console.error("Update failed", e); }
 }
 
@@ -187,7 +196,6 @@ async function deleteDefect(defectId) {
     try {
         const response = await fetch(`/api/defects/${defectId}`, { method: 'DELETE' });
         if(response.ok) fetchDatabaseStats(); 
-        else alert("Failed to delete record.");
     } catch (e) { console.error("Delete failed", e); }
 }
 
@@ -208,9 +216,6 @@ async function saveBridgeRemarks() {
             btn.innerText = "✅ Saved Successfully!";
             fetchDatabaseStats(); 
             setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
-        } else {
-            alert("Failed to save remarks to database.");
-            btn.innerText = "💾 Save Remarks";
         }
     } catch (e) {
         console.error("Save failed", e);
@@ -486,8 +491,9 @@ function renderImageGallery(images) {
             
             const card = document.createElement('div');
             card.className = 'gallery-card';
+            // Click to Preview
             card.innerHTML = `
-                <img src="${imgSrc}" class="gallery-img" alt="Defect">
+                <img src="${imgSrc}" class="gallery-img" alt="Defect" onclick="openImagePreview('${imgSrc}')" style="cursor: pointer;">
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;"><strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${defectType}</strong></p>
                     <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
@@ -546,13 +552,17 @@ async function fetchLiveCaptures() {
             const res = await fetch(`/api/mission/${currentActiveMission}/live_frames`);
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
+                // Ensure latest frames are shown and clickable!
                 gallery.innerHTML = data.frames.map(f => `
-                    <div class="live-capture-card">
+                    <div class="live-capture-card" onclick="openImagePreview('${f.url}')">
                         <span class="health-badge badge-fair" style="position: absolute; top: 5px; right: 5px;">Raw Frame</span>
                         <img src="${f.url}" alt="Raw Capture">
                         <div class="live-capture-info">Auto-Capture</div>
                     </div>
                 `).join('');
+                
+                // Auto-scroll gallery to right to see newest images
+                gallery.scrollLeft = gallery.scrollWidth;
             }
         } else {
             const res = await fetch(`/api/mission/${currentActiveMission}/captures`);
@@ -561,18 +571,12 @@ async function fetchLiveCaptures() {
             if (data.status === 'success') {
                 if (data.captures.length > 0) {
                     gallery.innerHTML = data.captures.map(c => `
-                        <div class="live-capture-card">
+                        <div class="live-capture-card" onclick="openImagePreview('${c.image_url}')">
                             <span class="health-badge ${c.severity.toLowerCase() === 'bad' ? 'badge-bad' : c.severity.toLowerCase() === 'poor' ? 'badge-poor' : 'badge-fair'}" style="position: absolute; top: 5px; right: 5px;">${c.severity}</span>
                             <img src="${c.image_url}" alt="Defect">
                             <div class="live-capture-info">${c.defect_type}</div>
                         </div>
                     `).join('');
-                } else {
-                    const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
-                    const statusData = await statusRes.json();
-                    if (statusData.status === 'Completed') {
-                        gallery.innerHTML = '<p class="text-muted" style="margin-top: 10px;">✅ Mission Processed. No defects detected.</p>';
-                    }
                 }
             }
         }
@@ -584,7 +588,6 @@ async function toggleFlightMission() {
     const bridgeSelect = document.getElementById('flightBridgeSelect');
     const spanInput = document.getElementById('flightSpanInput');
     
-    // UI Elements for Progress Bar
     const progressContainer = document.getElementById('aiProgressBarContainer');
     const progressBar = document.getElementById('aiProgressBar');
     const progressText = document.getElementById('aiProgressText');
@@ -611,60 +614,68 @@ async function toggleFlightMission() {
                 btn.innerHTML = '🛑 END MISSION & RUN AI';
                 btn.style.background = '#EF4444';
                 logToTerminal(`> MISSION #${data.mission_id} INITIATED. Auto-Capture ARMED.`, '#22C55E');
-                logToTerminal(`> Taking raw photos silently in background...`, '#FACC15');
+                logToTerminal(`> Capturing HD raw photos via secondary pipeline...`, '#FACC15');
 
-                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Capturing raw frames...</p>';
+                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first raw frame...</p>';
                 liveCaptureInterval = setInterval(fetchLiveCaptures, 2000);
             }
         } catch (e) { logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444'); }
     } else {
         // --- STOP MISSION & RUN BATCH PROCESSOR ---
-        btn.innerHTML = '⚙️ PROCESSING AI...';
+        clearInterval(liveCaptureInterval);
+        btn.innerHTML = '⚙️ PREPARING AI...';
         btn.disabled = true;
         btn.style.background = '#F59E0B'; 
         
-        // Show and Reset the Progress Bar
         progressContainer.style.display = 'block';
         progressText.style.display = 'block';
         progressBar.style.width = '0%';
-        progressText.innerText = '0% Complete';
+        progressText.innerText = 'Counting captures...';
 
-        logToTerminal(`> Mission complete. AI chewing through raw photos...`, '#F59E0B');
+        logToTerminal(`> Mission complete. Engaging YOLO AI processing engine...`, '#F59E0B');
         
         try {
             await fetch('/api/mission/stop', { method: 'POST' });
             isFlightActive = false;
             
-            // INCREASED POLLING SPEED to 1 Second for a much smoother animated progress bar
+            // Poll Backend every 1000ms for ultra-smooth UI updates
             const pollInterval = setInterval(async () => {
                 const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
                 const statusData = await statusRes.json();
                 
-                // Animate Progress Bar Real-Time
                 if (statusData.status === 'Processing') {
                     progressBar.style.width = `${statusData.progress}%`;
-                    progressText.innerText = `Analyzing Images: ${statusData.progress}% Complete`;
-                    btn.innerHTML = `⚙️ PROCESSING AI... ${statusData.progress}%`;
+                    
+                    if (statusData.total > 0) {
+                        progressText.innerText = `Analyzing Frames: ${statusData.processed} / ${statusData.total} Complete`;
+                        btn.innerHTML = `⚙️ PROCESSING AI... ${statusData.progress}%`;
+                    } else {
+                        progressText.innerText = `Searching for images...`;
+                    }
                 }
                 
-                if(statusData.status === 'Completed') {
+                if(statusData.status === 'Completed' || statusData.status === 'Unknown') {
                     clearInterval(pollInterval);
                     
-                    // Hide progress UI and reset Button
                     progressContainer.style.display = 'none';
                     progressText.style.display = 'none';
                     btn.disabled = false;
                     btn.innerHTML = '▶ START MISSION';
                     btn.style.background = '#10B981';
                     
-                    logToTerminal(`> AI Processing Complete! Filtering and saving defects to Database.`, '#22C55E');
+                    if (statusData.total === 0) {
+                        logToTerminal(`> AI Complete. No images were captured during flight.`, '#64748B');
+                        document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">❌ No frames captured. Flight too short.</p>';
+                    } else {
+                        logToTerminal(`> AI Processing Complete! Filtering and saving defects to Database.`, '#22C55E');
+                        fetchLiveCaptures(); 
+                    }
                     
-                    fetchLiveCaptures(); 
                     fetchDatabaseStats(); 
                     currentActiveMission = null;
                     bridgeSelect.disabled = false;
                 }
-            }, 1000); // 1000ms = 1 second
+            }, 1000); 
             
         } catch (e) {
             logToTerminal(`> ERROR stopping mission: ${e}`, '#EF4444');
