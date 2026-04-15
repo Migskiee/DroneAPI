@@ -75,7 +75,7 @@ flight_state = {
     "bridge_id": None,
     "span_target": "Span 1",
     "latest_raw_frame": None,
-    "mission_progress": {} # NEW: Tracks live AI processing percentage
+    "mission_progress": {} # Tracks exact number of files processed
 }
 state_lock = threading.Lock()
 
@@ -95,92 +95,100 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
         return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- POST-MISSION BATCH AI PROCESSOR ---
+# --- POST-MISSION BATCH AI PROCESSOR (BULLETPROOF) ---
 def post_mission_ai_processor(mission_id, span_target):
-    files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
-    total_files = len(files)
-    
-    # Initialize Progress Tracker
-    with state_lock:
-        flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
-
-    captured_track_ids = set()
-    MM_PER_PIXEL = 0.2
-    
-    for file in files:
-        filepath = os.path.join(TEMP_DIR, file)
-        frame = cv2.imread(filepath)
-        
-        if frame is not None and model is not None:
-            results = model.track(frame, conf=0.5, imgsz=320, persist=True, tracker="bytetrack.yaml", verbose=False)
-            boxes = results[0].boxes
-            
-            if boxes is not None and len(boxes) > 0:
-                track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else [int(time.time()*1000)+i for i in range(len(boxes))]
-                has_new_defect = False
-                capture_frame = frame.copy()
-                
-                for i in range(len(boxes)):
-                    track_id = track_ids[i]
-                    if track_id not in captured_track_ids:
-                        captured_track_ids.add(track_id)
-                        has_new_defect = True
-                        
-                        x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
-                        cls_id = int(boxes.cls[i].item())
-                        
-                        width_mm = (x2 - x1) * MM_PER_PIXEL
-                        height_mm = (y2 - y1) * MM_PER_PIXEL
-                        defect_type = model.names[cls_id].replace("_", " ").title()
-                        severity = assess_defect_severity(defect_type, width_mm, height_mm)
-                        
-                        box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
-                        cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
-                        cv2.putText(capture_frame, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                
-                if has_new_defect:
-                    tmp_path = f"upload_{mission_id}_{int(time.time()*1000)}.jpg"
-                    cv2.imwrite(tmp_path, capture_frame)
-                    try:
-                        upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
-                        secure_url = upload_result['secure_url']
-                        
-                        conn = psycopg2.connect(RAILWAY_DB_URL)
-                        cursor = conn.cursor()
-                        cursor.execute("""
-                            INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level)
-                            VALUES (%s, %s, %s, %s, %s)
-                        """, (mission_id, span_target, secure_url, defect_type, severity))
-                        conn.commit()
-                        cursor.close()
-                        conn.close()
-                    except Exception as e:
-                        print(f"Cloud sync failed: {e}")
-                    finally:
-                        if os.path.exists(tmp_path):
-                            os.remove(tmp_path)
-                            
-        try: os.remove(filepath)
-        except: pass
-        
-        # Update progress dynamically after each image
-        with state_lock:
-            flight_state["mission_progress"][mission_id]["processed"] += 1
-            
     try:
-        conn = psycopg2.connect(RAILWAY_DB_URL)
-        cursor = conn.cursor()
-        cursor.execute("UPDATE inspection_missions SET status = 'Completed' WHERE id = %s", (mission_id,))
-        conn.commit()
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print("DB Status Update failed", e)
+        files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
+        total_files = len(files)
         
-    # Clean up the tracker memory
-    with state_lock:
-        if mission_id in flight_state["mission_progress"]:
-            del flight_state["mission_progress"][mission_id]
+        # Lock in the total files immediately so the Progress UI can see it
+        with state_lock:
+            flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
+
+        captured_track_ids = set()
+        MM_PER_PIXEL = 0.2
+        
+        for file in files:
+            filepath = os.path.join(TEMP_DIR, file)
+            frame = cv2.imread(filepath)
+            
+            if frame is not None and model is not None:
+                results = model.track(frame, conf=0.5, imgsz=320, persist=True, tracker="bytetrack.yaml", verbose=False)
+                boxes = results[0].boxes
+                
+                if boxes is not None and len(boxes) > 0:
+                    track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else [int(time.time()*1000)+i for i in range(len(boxes))]
+                    has_new_defect = False
+                    capture_frame = frame.copy()
+                    
+                    for i in range(len(boxes)):
+                        track_id = track_ids[i]
+                        if track_id not in captured_track_ids:
+                            captured_track_ids.add(track_id)
+                            has_new_defect = True
+                            
+                            x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
+                            cls_id = int(boxes.cls[i].item())
+                            
+                            width_mm = (x2 - x1) * MM_PER_PIXEL
+                            height_mm = (y2 - y1) * MM_PER_PIXEL
+                            defect_type = model.names[cls_id].replace("_", " ").title()
+                            severity = assess_defect_severity(defect_type, width_mm, height_mm)
+                            
+                            box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
+                            cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
+                            cv2.putText(capture_frame, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    
+                    if has_new_defect:
+                        tmp_path = f"upload_{mission_id}_{int(time.time()*1000)}.jpg"
+                        cv2.imwrite(tmp_path, capture_frame)
+                        try:
+                            upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
+                            secure_url = upload_result['secure_url']
+                            
+                            conn = psycopg2.connect(RAILWAY_DB_URL)
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level)
+                                VALUES (%s, %s, %s, %s, %s)
+                            """, (mission_id, span_target, secure_url, defect_type, severity))
+                            conn.commit()
+                            cursor.close()
+                            conn.close()
+                        except Exception as e:
+                            print(f"Cloud sync failed: {e}")
+                        finally:
+                            if os.path.exists(tmp_path):
+                                os.remove(tmp_path)
+                                
+            try: os.remove(filepath)
+            except: pass
+            
+            # Artificial delay so the front-end Progress Bar renders smoothly
+            time.sleep(0.2) 
+            
+            # Increment processed count
+            with state_lock:
+                flight_state["mission_progress"][mission_id]["processed"] += 1
+                
+    except Exception as e:
+        print(f"AI Processor Background Crash: {e}")
+        
+    finally:
+        # Guarantee the DB status closes even if the AI crashes!
+        try:
+            conn = psycopg2.connect(RAILWAY_DB_URL)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE inspection_missions SET status = 'Completed' WHERE id = %s", (mission_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print("DB Status Update failed", e)
+            
+        with state_lock:
+            if mission_id in flight_state["mission_progress"]:
+                del flight_state["mission_progress"][mission_id]
 
 # ==========================================
 # UPLINK AND DOWNLINK (VIDEO STREAMING)
@@ -243,7 +251,6 @@ def generate_mjpeg_stream():
 def video_feed():
     return StreamingResponse(generate_mjpeg_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
 
-
 # ==========================================
 # FLIGHT CONTROL ENDPOINTS
 # ==========================================
@@ -290,7 +297,7 @@ def stop_mission():
             
     return {"status": "success"}
 
-# --- NEW: Fetches the Live Percentage ---
+# --- FIX: Passes the Exact Count back to the Javascript Progress Bar ---
 @app.get("/api/mission/{mission_id}/status")
 def get_mission_status(mission_id: int):
     try:
@@ -303,18 +310,26 @@ def get_mission_status(mission_id: int):
         
         status_str = res[0] if res else "Unknown"
         progress = 0
+        total = 0
+        processed = 0
         
-        # Calculate percentage if currently processing
         if status_str == 'Processing':
             with state_lock:
                 prog_data = flight_state["mission_progress"].get(mission_id)
                 if prog_data:
-                    if prog_data["total"] > 0:
-                        progress = int((prog_data["processed"] / prog_data["total"]) * 100)
+                    total = prog_data["total"]
+                    processed = prog_data["processed"]
+                    if total > 0:
+                        progress = int((processed / total) * 100)
                     else:
                         progress = 100
         
-        return {"status": status_str, "progress": progress}
+        return {
+            "status": status_str, 
+            "progress": progress, 
+            "total": total, 
+            "processed": processed
+        }
     except Exception as e:
         return {"status": "error"}
 
@@ -338,7 +353,7 @@ def get_mission_captures(mission_id: int):
 @app.get("/api/mission/{mission_id}/live_frames")
 def get_live_frames(mission_id: int):
     try:
-        files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")], reverse=True)[:6]
+        files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")], reverse=True)[:10]
         frames = [{"url": f"/temp_frames/{f}"} for f in files]
         return {"status": "success", "frames": frames}
     except Exception as e:

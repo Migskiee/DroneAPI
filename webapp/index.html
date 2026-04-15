@@ -128,7 +128,7 @@
                             <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
                                 <div>
                                     <h3>Inspection Image Gallery</h3>
-                                    <p class="text-muted" style="margin-bottom: 0;">Grouped by structural span.</p>
+                                    <p class="text-muted" style="margin-bottom: 0;">Click on any image to preview.</p>
                                 </div>
                                 <div class="gallery-filters">
                                     <select id="filterType" class="form-control filter-select" onchange="applyGalleryFilters()">
@@ -185,7 +185,7 @@
                         <div id="aiProgressBarContainer" style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 5px; height: 10px; overflow: hidden;">
                             <div id="aiProgressBar" style="width: 0%; height: 100%; background: #F59E0B; transition: width 0.3s ease;"></div>
                         </div>
-                        <p id="aiProgressText" style="display: none; text-align: center; font-size: 12px; color: #64748b; margin-top: 5px; font-weight: bold;">0% Complete</p>
+                        <p id="aiProgressText" style="display: none; text-align: center; font-size: 12px; color: #64748b; margin-top: 5px; font-weight: bold;">0 / 0 Frames Analyzed</p>
                         
                         <div id="flightLogTerminal" style="background: #0F172A; color: #38BDF8; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 6px; height: 150px; overflow-y: auto; margin-top: 15px;">
                             > GCS Cloud Link Established...<br>
@@ -203,19 +203,14 @@
             <h3 id="bridgeModalTitle" style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 20px;">Add New Bridge</h3>
             
             <input type="hidden" id="modalBridgeId">
-            
             <label style="font-size: 13px; font-weight: bold; color: #64748B;">Bridge Code</label>
             <input type="text" id="modalBridgeCode" class="form-control" placeholder="e.g. BR-1234">
-            
             <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Bridge Name</label>
             <input type="text" id="modalBridgeName" class="form-control" placeholder="e.g. Golden Gate">
-            
             <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Location</label>
             <input type="text" id="modalBridgeLocation" class="form-control" placeholder="e.g. San Francisco">
-            
             <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Number of Spans</label>
             <input type="number" id="modalBridgeSpanCount" class="form-control" placeholder="e.g. 4" min="1">
-            
             <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Remarks (Optional)</label>
             <textarea id="modalBridgeRemarks" class="form-control" rows="3" placeholder="Additional notes or structure details..."></textarea>
             
@@ -224,6 +219,11 @@
                 <button class="btn btn-primary" onclick="saveBridge()">Save Bridge</button>
             </div>
         </div>
+    </div>
+
+    <div id="imagePreviewModal" onclick="closeImagePreview()">
+        <span class="close-preview" onclick="closeImagePreview()">&times;</span>
+        <img id="previewImageSrc" src="" alt="Preview">
     </div>
 
     <script src="script.js"></script>
