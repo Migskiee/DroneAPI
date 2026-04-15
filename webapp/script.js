@@ -237,7 +237,8 @@ function showBridgeDetails(bridge) {
     document.getElementById('missionDetailView').style.display = 'none';
     document.getElementById('bridgeDetailView').style.display = 'block';
 
-    document.getElementById('detailName').innerText = bridge.name;
+    // ADDED EDIT BUTTON HERE NEXT TO THE TITLE
+    document.getElementById('detailName').innerHTML = `${bridge.name} <button onclick="openBridgeModal(${bridge.db_id})" style="margin-left: 15px; font-size: 14px; cursor: pointer; border: none; background: #E2E8F0; padding: 5px 12px; border-radius: 6px; color: #0F172A;">✏️ Edit</button>`;
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
@@ -526,5 +527,71 @@ async function toggleFlightMission() {
         } catch (e) {
             logToTerminal(`> ERROR stopping mission: ${e}`, '#EF4444');
         }
+    }
+}
+
+// ==========================================
+// ADD / EDIT BRIDGE CRUD LOGIC
+// ==========================================
+function openBridgeModal(db_id = null) {
+    const modal = document.getElementById('bridgeModal');
+    const title = document.getElementById('bridgeModalTitle');
+    
+    if (db_id) {
+        title.innerText = 'Edit Bridge Parameters';
+        const bridge = liveBridgeData.find(b => b.db_id === db_id);
+        
+        document.getElementById('modalBridgeId').value = bridge.db_id;
+        document.getElementById('modalBridgeCode').value = bridge.id;
+        document.getElementById('modalBridgeName').value = bridge.name;
+        document.getElementById('modalBridgeLocation').value = bridge.location;
+        document.getElementById('modalBridgeRemarks').value = bridge.remarks || '';
+    } else {
+        title.innerText = 'Add New Bridge';
+        document.getElementById('modalBridgeId').value = '';
+        document.getElementById('modalBridgeCode').value = '';
+        document.getElementById('modalBridgeName').value = '';
+        document.getElementById('modalBridgeLocation').value = '';
+        document.getElementById('modalBridgeRemarks').value = '';
+    }
+    
+    modal.style.display = 'flex';
+}
+
+function closeBridgeModal() {
+    document.getElementById('bridgeModal').style.display = 'none';
+}
+
+async function saveBridge() {
+    const db_id = document.getElementById('modalBridgeId').value;
+    
+    const payload = {
+        bridge_code: document.getElementById('modalBridgeCode').value,
+        name: document.getElementById('modalBridgeName').value,
+        location: document.getElementById('modalBridgeLocation').value,
+        remarks: document.getElementById('modalBridgeRemarks').value
+    };
+
+    if(!payload.bridge_code || !payload.name) return alert("Bridge Code and Name are required!");
+
+    const method = db_id ? 'PUT' : 'POST';
+    const url = db_id ? `/api/bridges/${db_id}` : '/api/bridges';
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            closeBridgeModal();
+            fetchDatabaseStats(); // Seamlessly fetch the new bridge
+        } else {
+            alert('Database update failed.');
+        }
+    } catch (error) {
+        console.error("Network Error:", error);
     }
 }

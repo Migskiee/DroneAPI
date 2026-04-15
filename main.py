@@ -8,10 +8,9 @@ import cloudinary
 import cloudinary.uploader
 import uvicorn
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
-from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
 
@@ -47,6 +46,12 @@ class RemarkUpdate(BaseModel):
 class MissionStartParams(BaseModel):
     bridge_id: int
     span_target: str
+
+class BridgeCreateUpdate(BaseModel):
+    bridge_code: str
+    name: str
+    location: str
+    remarks: str
 
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
@@ -174,6 +179,7 @@ async def websocket_uplink(websocket: WebSocket):
                         
     except WebSocketDisconnect:
         print("Drone WebSocket disconnected.")
+
 # --- 2. DOWNLINK: STREAM TO WEB DASHBOARD ---
 def get_standby_frame():
     # Creates a blank black image with yellow standby text
@@ -249,6 +255,43 @@ def stop_mission():
 # ==========================================
 # DATABASE CRUD ENDPOINTS
 # ==========================================
+
+# --- NEW: ADD A BRIDGE ---
+@app.post("/api/bridges")
+def add_bridge(bridge: BridgeCreateUpdate):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO bridges (bridge_code, name, location, remarks) 
+            VALUES (%s, %s, %s, %s) RETURNING id
+        """, (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks))
+        new_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "bridge_id": new_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- NEW: EDIT A BRIDGE ---
+@app.put("/api/bridges/{bridge_id}")
+def update_bridge(bridge_id: int, bridge: BridgeCreateUpdate):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE bridges 
+            SET bridge_code = %s, name = %s, location = %s, remarks = %s 
+            WHERE id = %s
+        """, (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/bridge-data")
 def get_bridge_data():
     try:

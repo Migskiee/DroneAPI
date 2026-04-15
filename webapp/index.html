@@ -62,9 +62,12 @@
 
             <section id="bridges" class="content-section" style="display:none;">
                 <div id="bridgeListView">
-                    <div class="bridge-header-bar">
-                        <h2 class="section-title">BRIDGE DATABASE</h2>
-                        <input type="text" id="bridgeSearch" class="search-input" placeholder="Search by name or location...">
+                    <div class="bridge-header-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                        <h2 class="section-title" style="margin-bottom: 0; border: none; padding: 0;">BRIDGE DATABASE</h2>
+                        <div style="display: flex; gap: 15px;">
+                            <input type="text" id="bridgeSearch" class="search-input" placeholder="Search by name or location...">
+                            <button class="btn btn-primary" onclick="openBridgeModal()" style="background: #10B981; border: none; padding: 10px 20px; border-radius: 6px; color: white; cursor: pointer; font-weight: bold;">➕ Add New Bridge</button>
+                        </div>
                     </div>
                     <div class="bridge-grid" id="bridgeGrid"></div>
                 </div>
@@ -175,6 +178,31 @@
             </section>
 
         </main>
+    </div>
+
+    <div id="bridgeModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3 id="bridgeModalTitle" style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 20px;">Add New Bridge</h3>
+            
+            <input type="hidden" id="modalBridgeId">
+            
+            <label style="font-size: 13px; font-weight: bold; color: #64748B;">Bridge Code</label>
+            <input type="text" id="modalBridgeCode" class="form-control" placeholder="e.g. BR-1234">
+            
+            <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px; display: block;">Bridge Name</label>
+            <input type="text" id="modalBridgeName" class="form-control" placeholder="e.g. Golden Gate">
+            
+            <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px; display: block;">Location</label>
+            <input type="text" id="modalBridgeLocation" class="form-control" placeholder="e.g. San Francisco">
+            
+            <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px; display: block;">Remarks (Optional)</label>
+            <textarea id="modalBridgeRemarks" class="form-control" rows="3" placeholder="Additional notes or structure details..."></textarea>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
+                <button class="btn" style="background: #94A3B8; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer;" onclick="closeBridgeModal()">Cancel</button>
+                <button class="btn btn-primary" style="background: #2563EB; border: none; padding: 10px 15px; border-radius: 6px; color: white; cursor: pointer; font-weight: bold;" onclick="saveBridge()">Save Bridge</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
