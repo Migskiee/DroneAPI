@@ -26,10 +26,15 @@ cloudinary.config(
 
 RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interchange.proxy.rlwy.net:21621/railway"
 
+# Create a temporary folder to hold photos during the flight
+TEMP_DIR = "temp_mission_frames"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
 try:
     conn = psycopg2.connect(RAILWAY_DB_URL)
     cursor = conn.cursor()
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS remarks TEXT;")
+    cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS span_count INTEGER DEFAULT 1;")
     conn.commit()
     cursor.close()
     conn.close()
@@ -53,6 +58,7 @@ class BridgeCreateUpdate(BaseModel):
     name: str
     location: str
     remarks: str
+    span_count: int
 
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
@@ -64,15 +70,12 @@ except Exception as e:
     print(f"Warning: YOLO Model not found or failed to load. {e}")
     model = None
 
-# FIX: Decoupled AI state using latest_detections instead of latest_annotated_frame
 flight_state = {
     "is_active": False,
     "mission_id": None,
     "bridge_id": None,
     "span_target": "Span 1",
     "latest_raw_frame": None,
-    "latest_detections": [], 
-    "captured_track_ids": set()
 }
 state_lock = threading.Lock()
 
@@ -92,83 +95,109 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
         return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- THE DECOUPLED AI BACKGROUND WORKER ---
-def ai_processing_worker():
-    MM_PER_PIXEL = 0.2
-    
+# --- NEW: BACKGROUND AUTO-CAPTURE WORKER (RUNS DURING FLIGHT) ---
+def auto_capture_worker():
+    # Takes a silent photo every 2 seconds while the drone is flying
     while True:
         with state_lock:
-            active = flight_state["is_active"]
+            is_active = flight_state["is_active"]
             raw_frame = flight_state["latest_raw_frame"]
+            m_id = flight_state["mission_id"]
             
-        if active and raw_frame is not None and model is not None:
-            frame_to_analyze = raw_frame.copy()
-            results = model.track(frame_to_analyze, conf=0.5, imgsz=320, persist=True, tracker="bytetrack.yaml", verbose=False)
+        if is_active and raw_frame is not None:
+            timestamp = int(time.time() * 1000)
+            filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}.jpg")
+            cv2.imwrite(filepath, raw_frame)
+            
+        time.sleep(2.0) # <--- Change this number to capture photos faster or slower
+
+threading.Thread(target=auto_capture_worker, daemon=True).start()
+
+# --- NEW: POST-MISSION BATCH AI PROCESSOR (RUNS AFTER FLIGHT) ---
+def post_mission_ai_processor(mission_id, span_target):
+    # Gathers all photos taken during the mission
+    files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
+    captured_track_ids = set()
+    MM_PER_PIXEL = 0.2
+    
+    for file in files:
+        filepath = os.path.join(TEMP_DIR, file)
+        frame = cv2.imread(filepath)
+        
+        if frame is not None and model is not None:
+            # Run YOLO AI on the photo
+            results = model.track(frame, conf=0.5, imgsz=320, persist=True, tracker="bytetrack.yaml", verbose=False)
             boxes = results[0].boxes
             
-            new_detections = []
-            
-            if boxes is not None and len(boxes) > 0 and boxes.id is not None:
-                track_ids = boxes.id.int().cpu().tolist()
+            # IF DEFECTS ARE DETECTED
+            if boxes is not None and len(boxes) > 0:
+                # If tracker loses ID, assign a fallback timestamp ID
+                track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else [int(time.time()*1000)+i for i in range(len(boxes))]
+                has_new_defect = False
+                capture_frame = frame.copy()
                 
+                # Draw boxes for all detected defects
                 for i in range(len(boxes)):
-                    x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
-                    cls_id = int(boxes.cls[i].item())
                     track_id = track_ids[i]
-                    
-                    width_mm = (x2 - x1) * MM_PER_PIXEL
-                    height_mm = (y2 - y1) * MM_PER_PIXEL
-                    defect_type = model.names[cls_id].replace("_", " ").title()
-                    severity = assess_defect_severity(defect_type, width_mm, height_mm)
-                    
-                    box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
-                    
-                    # Store detection data to draw over the high-speed stream later
-                    new_detections.append({
-                        "x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2),
-                        "defect_type": defect_type, "severity": severity, "color": box_color
-                    })
-
-                    # Only draw the boxes physically on the frame we are uploading to the DB
-                    if track_id not in flight_state["captured_track_ids"]:
-                        flight_state["captured_track_ids"].add(track_id)
-                        capture_frame = frame_to_analyze.copy()
+                    if track_id not in captured_track_ids:
+                        captured_track_ids.add(track_id)
+                        has_new_defect = True
+                        
+                        x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
+                        cls_id = int(boxes.cls[i].item())
+                        
+                        width_mm = (x2 - x1) * MM_PER_PIXEL
+                        height_mm = (y2 - y1) * MM_PER_PIXEL
+                        defect_type = model.names[cls_id].replace("_", " ").title()
+                        severity = assess_defect_severity(defect_type, width_mm, height_mm)
+                        
+                        box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                         cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
-                        
-                        tmp_path = f"tmp_defect_{track_id}.jpg"
-                        cv2.imwrite(tmp_path, capture_frame)
-                        
-                        try:
-                            upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
-                            secure_url = upload_result['secure_url']
-                            
-                            conn = psycopg2.connect(RAILWAY_DB_URL)
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level)
-                                VALUES (%s, %s, %s, %s, %s)
-                            """, (flight_state["mission_id"], flight_state["span_target"], secure_url, defect_type, severity))
-                            conn.commit()
-                            cursor.close()
-                            conn.close()
-                        except Exception as e:
-                            print(f"Cloud sync failed: {e}")
-                        finally:
-                            if os.path.exists(tmp_path):
-                                os.remove(tmp_path)
-
-            with state_lock:
-                flight_state["latest_detections"] = new_detections
+                        cv2.putText(capture_frame, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 
-        time.sleep(0.05)
+                # ONLY UPLOAD IF A NEW DEFECT WAS FOUND
+                if has_new_defect:
+                    tmp_path = f"upload_{mission_id}_{int(time.time()*1000)}.jpg"
+                    cv2.imwrite(tmp_path, capture_frame)
+                    try:
+                        upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
+                        secure_url = upload_result['secure_url']
+                        
+                        conn = psycopg2.connect(RAILWAY_DB_URL)
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (mission_id, span_target, secure_url, defect_type, severity))
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                    except Exception as e:
+                        print(f"Cloud sync failed: {e}")
+                    finally:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                            
+        # DELETE THE RAW PHOTO REGARDLESS (Only annotated ones with defects were saved to Cloudinary)
+        try: os.remove(filepath)
+        except: pass
+            
+    # Mark the mission as officially 'Completed' in the Database
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE inspection_missions SET status = 'Completed' WHERE id = %s", (mission_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print("DB Status Update failed", e)
 
-threading.Thread(target=ai_processing_worker, daemon=True).start()
 
 # ==========================================
 # UPLINK AND DOWNLINK (VIDEO STREAMING)
 # ==========================================
 
-# --- 1. UPLINK: RECEIVE VIDEO FROM RASPBERRY PI ---
 @app.websocket("/api/uplink/stream")
 async def websocket_uplink(websocket: WebSocket):
     await websocket.accept()
@@ -186,28 +215,21 @@ async def websocket_uplink(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Drone WebSocket disconnected.")
 
-# --- 2. DOWNLINK: STREAM TO WEB DASHBOARD ---
 def get_standby_frame():
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     cv2.putText(frame, "AWAITING DRONE UPLINK...", (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
     return frame
 
 def generate_mjpeg_stream():
+    # Because we removed the live AI drawing, this stream is now pure hardware video! Zero Lag!
     while True:
         with state_lock:
             frame = flight_state["latest_raw_frame"]
-            detections = flight_state["latest_detections"]
-            is_active = flight_state["is_active"]
             
         if frame is None:
             frame_to_stream = get_standby_frame()
         else:
             frame_to_stream = frame.copy()
-            # Draw boxes on the fly so the video doesn't lag!
-            if is_active:
-                for det in detections:
-                    cv2.rectangle(frame_to_stream, (det['x1'], det['y1']), (det['x2'], det['y2']), det['color'], 2)
-                    cv2.putText(frame_to_stream, f"{det['defect_type']} [{det['severity']}]", (det['x1'], det['y1'] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
         ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
         frame_bytes = buffer.tobytes()
@@ -240,8 +262,6 @@ def start_mission(params: MissionStartParams):
             flight_state["mission_id"] = m_id
             flight_state["bridge_id"] = params.bridge_id
             flight_state["span_target"] = params.span_target
-            flight_state["captured_track_ids"].clear()
-            flight_state["latest_detections"] = []
 
         return {"status": "success", "mission_id": m_id}
     except Exception as e:
@@ -252,19 +272,36 @@ def stop_mission():
     with state_lock:
         flight_state["is_active"] = False
         m_id = flight_state["mission_id"]
+        span_target = flight_state["span_target"]
         
     if m_id:
         try:
             conn = psycopg2.connect(RAILWAY_DB_URL)
             cursor = conn.cursor()
-            cursor.execute("UPDATE inspection_missions SET status = 'Completed' WHERE id = %s", (m_id,))
+            cursor.execute("UPDATE inspection_missions SET status = 'Processing' WHERE id = %s", (m_id,))
             conn.commit()
             cursor.close()
             conn.close()
+            
+            # Start the AI Background Batch Processor
+            threading.Thread(target=post_mission_ai_processor, args=(m_id, span_target)).start()
         except Exception as e:
-            print("Failed to update mission status:", e)
+            print("Failed to trigger processing:", e)
             
     return {"status": "success"}
+
+@app.get("/api/mission/{mission_id}/status")
+def get_mission_status(mission_id: int):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM inspection_missions WHERE id = %s", (mission_id,))
+        res = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return {"status": res[0] if res else "Unknown"}
+    except Exception as e:
+        return {"status": "error"}
 
 @app.get("/api/mission/{mission_id}/captures")
 def get_mission_captures(mission_id: int):
@@ -284,7 +321,7 @@ def get_mission_captures(mission_id: int):
         return {"status": "error", "detail": str(e)}
 
 # ==========================================
-# DATABASE CRUD ENDPOINTS
+# DATABASE CRUD ENDPOINTS (No Changes Needed Here)
 # ==========================================
 @app.post("/api/bridges")
 def add_bridge(bridge: BridgeCreateUpdate):
@@ -292,9 +329,9 @@ def add_bridge(bridge: BridgeCreateUpdate):
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO bridges (bridge_code, name, location, remarks) 
-            VALUES (%s, %s, %s, %s) RETURNING id
-        """, (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks))
+            INSERT INTO bridges (bridge_code, name, location, remarks, span_count) 
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+        """, (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge.span_count))
         new_id = cursor.fetchone()[0]
         conn.commit()
         cursor.close()
@@ -310,9 +347,9 @@ def update_bridge(bridge_id: int, bridge: BridgeCreateUpdate):
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE bridges 
-            SET bridge_code = %s, name = %s, location = %s, remarks = %s 
+            SET bridge_code = %s, name = %s, location = %s, remarks = %s, span_count = %s 
             WHERE id = %s
-        """, (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge_id))
+        """, (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge.span_count, bridge_id))
         conn.commit()
         cursor.close()
         conn.close()
@@ -325,23 +362,19 @@ def get_bridge_data():
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-
         cursor.execute("SELECT COUNT(*) FROM bridges")
         total_bridges = cursor.fetchone()[0]
-
         cursor.execute("SELECT COUNT(*) FROM captured_images")
         total_defects = cursor.fetchone()[0]
-
         cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images GROUP BY severity_level")
         severity_data = cursor.fetchall()
 
-        cursor.execute("SELECT id, bridge_code, name, location, remarks FROM bridges")
+        cursor.execute("SELECT id, bridge_code, name, location, remarks, span_count FROM bridges")
         db_bridges = cursor.fetchall()
         
         bridge_list = []
         for b in db_bridges:
             bridge_id = b[0]
-            
             cursor.execute("""
                 SELECT severity_level, COUNT(*) FROM captured_images 
                 JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id
@@ -368,12 +401,11 @@ def get_bridge_data():
 
             bridge_list.append({
                 "db_id": bridge_id, "id": b[1], "name": b[2],
-                "location": b[3], "remarks": b[4], "defects": bridge_defects, "images": image_gallery
+                "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery
             })
 
         cursor.close()
         conn.close()
-
         return {
             "status": "success",
             "stats": {"total_bridges": total_bridges, "total_defects": total_defects, "severity": severity_data},

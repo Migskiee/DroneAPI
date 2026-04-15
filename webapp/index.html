@@ -173,13 +173,10 @@
 
                         <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 10px;">Active Flight Zone:</label>
                         
-                        <div class="span-btn-group">
-                            <button class="span-btn active" onclick="setFlightSpan('Span 1', this)">Span 1</button>
-                            <button class="span-btn" onclick="setFlightSpan('Span 2', this)">Span 2</button>
-                            <button class="span-btn" onclick="setFlightSpan('Span 3', this)">Span 3</button>
-                            <button class="span-btn" onclick="setFlightSpan('Span 4', this)">Span 4</button>
+                        <div id="dynamicSpanContainer" class="span-btn-group">
+                            <p class="text-muted" style="font-size: 12px; margin-top: 5px;">Please select a bridge to load spans.</p>
                         </div>
-                        <input type="hidden" id="flightSpanInput" value="Span 1">
+                        <input type="hidden" id="flightSpanInput" value="">
 
                         <button id="toggleMissionBtn" class="btn btn-primary" onclick="toggleFlightMission()" style="background: #10B981; font-size: 16px; padding: 15px; margin-top: 20px;">
                             ▶ START MISSION & AI
@@ -210,6 +207,9 @@
             
             <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Location</label>
             <input type="text" id="modalBridgeLocation" class="form-control" placeholder="e.g. San Francisco">
+            
+            <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Number of Spans</label>
+            <input type="number" id="modalBridgeSpanCount" class="form-control" placeholder="e.g. 4" min="1">
             
             <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px;">Remarks (Optional)</label>
             <textarea id="modalBridgeRemarks" class="form-control" rows="3" placeholder="Additional notes or structure details..."></textarea>

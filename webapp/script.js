@@ -5,7 +5,6 @@ let liveBridgeData = [];
 let currentActiveBridge = null;
 let currentActiveMission = null; 
 let isFlightActive = false;
-let liveCaptureInterval = null; // Used for the gallery
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -30,6 +29,27 @@ document.addEventListener('DOMContentLoaded', () => {
             bridge.name.toLowerCase().includes(term) || bridge.location.toLowerCase().includes(term)
         );
         renderBridges(filtered);
+    });
+
+    document.getElementById('flightBridgeSelect').addEventListener('change', function() {
+        const db_id = parseInt(this.value);
+        const bridge = liveBridgeData.find(b => b.db_id === db_id);
+        const container = document.getElementById('dynamicSpanContainer');
+        container.innerHTML = '';
+        
+        if(bridge && bridge.span_count > 0) {
+            for(let i = 1; i <= bridge.span_count; i++) {
+                const btn = document.createElement('button');
+                btn.className = `span-btn ${i === 1 ? 'active' : ''}`;
+                btn.innerText = `Span ${i}`;
+                btn.onclick = function() { setFlightSpan(`Span ${i}`, this); };
+                container.appendChild(btn);
+            }
+            document.getElementById('flightSpanInput').value = 'Span 1';
+        } else {
+            container.innerHTML = '<p class="text-muted" style="font-size: 12px; margin-top: 5px;">No spans configured.</p>';
+            document.getElementById('flightSpanInput').value = '';
+        }
     });
 
     fetchDatabaseStats();
@@ -78,6 +98,7 @@ function openBridgeModal(db_id = null) {
         document.getElementById('modalBridgeName').value = bridge.name;
         document.getElementById('modalBridgeLocation').value = bridge.location;
         document.getElementById('modalBridgeRemarks').value = bridge.remarks || '';
+        document.getElementById('modalBridgeSpanCount').value = bridge.span_count || 1;
     } else {
         title.innerText = 'Add New Bridge';
         document.getElementById('modalBridgeId').value = '';
@@ -85,6 +106,7 @@ function openBridgeModal(db_id = null) {
         document.getElementById('modalBridgeName').value = '';
         document.getElementById('modalBridgeLocation').value = '';
         document.getElementById('modalBridgeRemarks').value = '';
+        document.getElementById('modalBridgeSpanCount').value = 1;
     }
     modal.style.display = 'flex';
 }
@@ -99,7 +121,8 @@ async function saveBridge() {
         bridge_code: document.getElementById('modalBridgeCode').value,
         name: document.getElementById('modalBridgeName').value,
         location: document.getElementById('modalBridgeLocation').value,
-        remarks: document.getElementById('modalBridgeRemarks').value
+        remarks: document.getElementById('modalBridgeRemarks').value,
+        span_count: parseInt(document.getElementById('modalBridgeSpanCount').value) || 1
     };
 
     if(!payload.bridge_code || !payload.name) return alert("Bridge Code and Name are required!");
@@ -528,7 +551,6 @@ function renderImageGallery(images) {
 // ==========================================
 function populateFlightDropdown() {
     const select = document.getElementById('flightBridgeSelect');
-    // Added Default Option per request
     select.innerHTML = '<option value="" disabled selected>-- Select Target Bridge --</option>';
     liveBridgeData.forEach(bridge => {
         const option = document.createElement('option');
@@ -578,8 +600,10 @@ async function toggleFlightMission() {
     const spanInput = document.getElementById('flightSpanInput');
 
     if (!isFlightActive) {
+        // --- START MISSION ---
         const bridgeId = parseInt(bridgeSelect.value);
         if(isNaN(bridgeId)) return alert("Please select a target bridge from the dropdown.");
+        if(!spanInput.value) return alert("Please select a target span.");
 
         try {
             const res = await fetch('/api/mission/start', {
@@ -594,32 +618,48 @@ async function toggleFlightMission() {
                 currentActiveMission = data.mission_id;
                 bridgeSelect.disabled = true;
                 
-                btn.innerHTML = '🛑 END MISSION';
+                btn.innerHTML = '🛑 END MISSION & RUN AI';
                 btn.style.background = '#EF4444';
-                logToTerminal(`> MISSION #${data.mission_id} INITIATED. AI ARMED.`, '#22C55E');
-                logToTerminal(`> Live cloud syncing activated.`, '#FACC15');
+                logToTerminal(`> MISSION #${data.mission_id} INITIATED. Auto-Capture ARMED.`, '#22C55E');
+                logToTerminal(`> Taking raw photos silently in background...`, '#FACC15');
 
-                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">Scanning for defects...</p>';
-                liveCaptureInterval = setInterval(fetchLiveCaptures, 3000);
+                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Capturing raw frames... AI batch process will begin after mission ends.</p>';
             }
-        } catch (e) {
-            logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444');
-        }
+        } catch (e) { logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444'); }
     } else {
+        // --- STOP MISSION & RUN BATCH PROCESSOR ---
+        btn.innerHTML = '⚙️ PROCESSING AI...';
+        btn.disabled = true;
+        btn.style.background = '#F59E0B'; // Orange Loading State
+        logToTerminal(`> Mission complete. AI chewing through raw photos...`, '#F59E0B');
+        
         try {
             await fetch('/api/mission/stop', { method: 'POST' });
             isFlightActive = false;
-            currentActiveMission = null;
-            bridgeSelect.disabled = false;
             
-            btn.innerHTML = '▶ START MISSION & AI';
-            btn.style.background = '#10B981';
-            logToTerminal(`> MISSION CONCLUDED. AI Disarmed.`, '#F59E0B');
+            // Poll the backend every 2 seconds to see if the Batch Processor is finished
+            const pollInterval = setInterval(async () => {
+                const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
+                const statusData = await statusRes.json();
+                
+                if(statusData.status === 'Completed') {
+                    clearInterval(pollInterval);
+                    btn.disabled = false;
+                    btn.innerHTML = '▶ START MISSION & AI';
+                    btn.style.background = '#10B981';
+                    
+                    logToTerminal(`> AI Processing Complete! Filtering and saving defects to Database.`, '#22C55E');
+                    
+                    fetchLiveCaptures(); 
+                    fetchDatabaseStats(); 
+                    currentActiveMission = null;
+                    bridgeSelect.disabled = false;
+                }
+            }, 2000);
             
-            clearInterval(liveCaptureInterval);
-            fetchDatabaseStats(); 
         } catch (e) {
             logToTerminal(`> ERROR stopping mission: ${e}`, '#EF4444');
+            btn.disabled = false;
         }
     }
 }
