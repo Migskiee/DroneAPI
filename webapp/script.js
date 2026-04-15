@@ -664,7 +664,7 @@ async function toggleFlightMission() {
                     btn.style.background = '#10B981';
                     
                     if (statusData.total === 0) {
-                        logToTerminal(`> AI Complete. No images were captured during flight.`, '#64748B');
+                        logToTerminal(`> AI Complete. No defects were captured during flight.`, '#64748B');
                         document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">❌ No frames captured. Flight too short.</p>';
                     } else {
                         logToTerminal(`> AI Processing Complete! Filtering and saving defects to Database.`, '#22C55E');
