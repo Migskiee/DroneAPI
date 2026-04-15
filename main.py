@@ -8,9 +8,10 @@ import cloudinary
 import cloudinary.uploader
 import uvicorn
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
+from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
 
@@ -37,12 +38,6 @@ except Exception as e:
 
 app = FastAPI()
 
-class BridgeCreateUpdate(BaseModel):
-    bridge_code: str
-    name: str
-    location: str
-    remarks: str
-
 class SeverityUpdate(BaseModel):
     severity: str
 
@@ -52,6 +47,12 @@ class RemarkUpdate(BaseModel):
 class MissionStartParams(BaseModel):
     bridge_id: int
     span_target: str
+
+class BridgeCreateUpdate(BaseModel):
+    bridge_code: str
+    name: str
+    location: str
+    remarks: str
 
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
@@ -63,13 +64,14 @@ except Exception as e:
     print(f"Warning: YOLO Model not found or failed to load. {e}")
     model = None
 
+# FIX: Decoupled AI state using latest_detections instead of latest_annotated_frame
 flight_state = {
     "is_active": False,
     "mission_id": None,
     "bridge_id": None,
     "span_target": "Span 1",
     "latest_raw_frame": None,
-    "latest_detections": [], # FIX: Decoupled bounding boxes
+    "latest_detections": [], 
     "captured_track_ids": set()
 }
 state_lock = threading.Lock()
@@ -121,18 +123,18 @@ def ai_processing_worker():
                     
                     box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                     
-                    # Store data to be drawn cleanly over the high-speed video
+                    # Store detection data to draw over the high-speed stream later
                     new_detections.append({
                         "x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2),
                         "defect_type": defect_type, "severity": severity, "color": box_color
                     })
 
+                    # Only draw the boxes physically on the frame we are uploading to the DB
                     if track_id not in flight_state["captured_track_ids"]:
                         flight_state["captured_track_ids"].add(track_id)
-                        
-                        # Draw boxes just for the saved picture
                         capture_frame = frame_to_analyze.copy()
                         cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
+                        
                         tmp_path = f"tmp_defect_{track_id}.jpg"
                         cv2.imwrite(tmp_path, capture_frame)
                         
@@ -158,15 +160,15 @@ def ai_processing_worker():
             with state_lock:
                 flight_state["latest_detections"] = new_detections
                 
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 threading.Thread(target=ai_processing_worker, daemon=True).start()
-
 
 # ==========================================
 # UPLINK AND DOWNLINK (VIDEO STREAMING)
 # ==========================================
 
+# --- 1. UPLINK: RECEIVE VIDEO FROM RASPBERRY PI ---
 @app.websocket("/api/uplink/stream")
 async def websocket_uplink(websocket: WebSocket):
     await websocket.accept()
@@ -184,6 +186,7 @@ async def websocket_uplink(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Drone WebSocket disconnected.")
 
+# --- 2. DOWNLINK: STREAM TO WEB DASHBOARD ---
 def get_standby_frame():
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     cv2.putText(frame, "AWAITING DRONE UPLINK...", (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
@@ -200,18 +203,18 @@ def generate_mjpeg_stream():
             frame_to_stream = get_standby_frame()
         else:
             frame_to_stream = frame.copy()
-            # Overlay the AI boxes dynamically without pausing the video!
+            # Draw boxes on the fly so the video doesn't lag!
             if is_active:
                 for det in detections:
                     cv2.rectangle(frame_to_stream, (det['x1'], det['y1']), (det['x2'], det['y2']), det['color'], 2)
                     cv2.putText(frame_to_stream, f"{det['defect_type']} [{det['severity']}]", (det['x1'], det['y1'] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
-        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         
-        time.sleep(0.05)
+        time.sleep(0.03)
 
 @app.get("/video_feed")
 def video_feed():
@@ -219,7 +222,7 @@ def video_feed():
 
 
 # ==========================================
-# FLIGHT CONTROL & LIVE CAPTURE ENDPOINTS
+# FLIGHT CONTROL ENDPOINTS
 # ==========================================
 @app.post("/api/mission/start")
 def start_mission(params: MissionStartParams):
@@ -259,7 +262,7 @@ def stop_mission():
             cursor.close()
             conn.close()
         except Exception as e:
-            pass
+            print("Failed to update mission status:", e)
             
     return {"status": "success"}
 

@@ -31,50 +31,148 @@
                     </div>
                     <div class="analytics-details-panel">
                         <h3>Health Condition Breakdown</h3>
-                        <p class="text-muted">Current structural overview across all monitored assets.</p>
-                        <div class="stat-grid" style="margin-top: 20px;">
-                            <div class="stat-box"><span id="g-total-bridges">0</span><h4>Total Bridges</h4></div>
-                            <div class="stat-box"><span id="g-total-defects" style="color:#EF4444">0</span><h4>Total Defects</h4></div>
-                        </div>
+                        <p class="text-muted">Current structural condition of registered bridges based on their most recent flight mission.</p>
+                        <ul class="condition-list stats-list">
+                            <li>
+                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Bad (Critical Repair Needed)</strong></div>
+                                <span class="stat-value" id="countHigh">0</span>
+                            </li>
+                            <li>
+                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Poor (Requires Maintenance)</strong></div>
+                                <span class="stat-value" id="countReview">0</span>
+                            </li>
+                            <li>
+                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Fair / Good (Safe)</strong></div>
+                                <span class="stat-value" id="countLow">0</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="analytics-summary-row">
+                    <div class="summary-card">
+                        <h4>Total Registered Bridges</h4>
+                        <span class="summary-value" id="totalBridgesValue">0</span>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Defects Detected</h4>
+                        <span class="summary-value" id="totalDefectsValue">0</span>
                     </div>
                 </div>
             </section>
 
-            <section id="bridges" class="content-section" style="display: none;">
-                <h2 class="section-title">BRIDGE DATABASE</h2>
-                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                    <input type="text" id="bridgeSearch" class="form-control" placeholder="🔍 Search bridges by name or location..." style="flex: 1;">
-                    <button class="btn btn-primary" onclick="openBridgeModal()" style="background: #10B981;">➕ Add New Bridge</button>
+            <section id="bridges" class="content-section" style="display:none;">
+                <div id="bridgeListView">
+                    <div class="bridge-header-bar">
+                        <h2 class="section-title">BRIDGE DATABASE</h2>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="text" id="bridgeSearch" class="search-input" placeholder="Search by name or location...">
+                            <button class="btn btn-primary" onclick="openBridgeModal()" style="padding: 10px 15px; font-size: 14px;">➕ Add New Bridge</button>
+                        </div>
+                    </div>
+                    <div class="bridge-grid" id="bridgeGrid"></div>
                 </div>
-                <div id="bridgeContainer"></div>
-            </section>
 
-            <section id="live-flight" class="content-section" style="display: none;">
-                <h2 class="section-title">LIVE TELEMETRY & FLIGHT CONTROL</h2>
-                <div style="display: flex; gap: 20px;">
+                <div id="bridgeDetailView" style="display:none;">
+                    <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to Database</button>
+                    <div class="detail-header">
+                        <h2 id="detailName">Loading...</h2>
+                        <p id="detailLocation" class="text-muted">Loading...</p>
+                        <span id="detailId" class="badge badge-online">ID</span>
+                    </div>
                     
-                    <div style="flex: 2; display: flex; flex-direction: column; gap: 20px;">
-                        <div class="video-container" style="background: #000; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            <img id="liveStream" src="/video_feed" alt="Awaiting connection..." style="width: 100%; border-radius: 4px;">
+                    <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
+                        
+                        <div class="bridge-overview-row">
+                            <div class="detail-analytics chart-section">
+                                <h3>Latest Mission Defect Distribution</h3>
+                                <p class="text-muted" id="latestMissionChartDesc">Defect breakdown from the most recent flight.</p>
+                                <div class="chart-container">
+                                    <canvas id="defectChart"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="detail-analytics remarks-section">
+                                <h3>Structure Condition & Remarks</h3>
+                                <div id="bridgeConditionBadge" class="status-badge">Loading...</div>
+                                <p class="text-muted" style="margin-bottom: 5px; font-size: 13px;">Engineering Remarks:</p>
+                                <textarea id="bridgeRemarks" class="form-control" rows="6" placeholder="Loading remarks..."></textarea>
+                                <button class="btn btn-primary" style="margin-top: 15px; width: 100%;" onclick="saveBridgeRemarks()">💾 Save Remarks</button>
+                            </div>
                         </div>
 
+                        <div class="detail-analytics" style="width: 100%;">
+                            <h3>Historical Flight Mission Logs</h3>
+                            <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
+                            <div id="missionListGrid" class="mission-grid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="missionDetailView" style="display:none;">
+                    <button class="btn btn-secondary" onclick="backToBridgeDetails()">← Back to Bridge Overview</button>
+                    <div class="detail-header">
+                        <h2 id="missionDetailTitle">Mission Data</h2>
+                        <p id="missionDetailSubtitle" class="text-muted">Loading...</p>
+                    </div>
+                    <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
+                        
+                        <div class="detail-analytics" style="width: 100%;">
+                            <h3>Mission Defect Distribution</h3>
+                            <p class="text-muted">Defect severity breakdown specific to this flight only.</p>
+                            <div class="chart-container" style="height: 250px;">
+                                <canvas id="missionDefectChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="detail-analytics" style="width: 100%;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
+                                <div>
+                                    <h3>Inspection Image Gallery</h3>
+                                    <p class="text-muted" style="margin-bottom: 0;">Grouped by structural span.</p>
+                                </div>
+                                <div class="gallery-filters">
+                                    <select id="filterType" class="form-control filter-select" onchange="applyGalleryFilters()">
+                                        <option value="all">All Defect Types</option>
+                                        <option value="Chipping">Chipping</option>
+                                        <option value="Crack">Crack</option>
+                                        <option value="Water Infiltration">Water Infiltration</option>
+                                        <option value="Flaking">Flaking</option>
+                                        <option value="Exposed Rebar">Exposed Rebar</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="galleryContainer"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <section id="live-flight" class="content-section" style="display:none;">
+                <h2 class="section-title">GCS: LIVE FLIGHT TELEMETRY</h2>
+                
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 2; display: flex; flex-direction: column; gap: 15px;">
+                        <div style="background: #0F172A; border-radius: 8px; overflow: hidden; border: 2px solid #334155; position: relative; min-height: 480px;">
+                            <img id="liveVideoStream" src="/video_feed" style="width: 100%; height: 100%; object-fit: contain; display: block;" alt="Awaiting 4G Uplink from Drone...">
+                        </div>
+                        
                         <div class="recent-captures-panel">
-                            <h3 style="font-size: 16px; color: #1e293b; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">Recent AI Captures</h3>
+                            <h3 style="font-size: 16px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px;">Recent AI Captures</h3>
                             <div id="liveCaptureGallery" class="live-gallery">
-                                <p class="text-muted">Awaiting mission start and drone telemetry...</p>
+                                <p class="text-muted" style="margin-top: 10px;">Awaiting mission start and drone telemetry...</p>
                             </div>
                         </div>
                     </div>
 
-                    <div style="flex: 1; background: #FFFFFF; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
-                        <h3 style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 15px;">Flight Parameters</h3>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 15px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                        <h3 style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 8px;">Flight Parameters</h3>
                         
                         <label style="font-size: 13px; font-weight: bold; color: #64748B;">Target Structure:</label>
-                        <select id="flightBridgeSelect" class="form-control" style="font-weight: bold;">
-                            <option value="" disabled selected>-- Select Target Bridge --</option>
-                        </select>
+                        <select id="flightBridgeSelect" class="form-control" style="font-weight: bold;"></select>
 
-                        <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 15px; margin-bottom: 5px;">Active Flight Zone:</label>
+                        <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 10px;">Active Flight Zone:</label>
+                        
                         <div class="span-btn-group">
                             <button class="span-btn active" onclick="setFlightSpan('Span 1', this)">Span 1</button>
                             <button class="span-btn" onclick="setFlightSpan('Span 2', this)">Span 2</button>
@@ -83,11 +181,11 @@
                         </div>
                         <input type="hidden" id="flightSpanInput" value="Span 1">
 
-                        <button id="toggleMissionBtn" class="btn btn-primary" onclick="toggleFlightMission()" style="background: #10B981; font-size: 16px; padding: 15px; margin-top: 25px;">
+                        <button id="toggleMissionBtn" class="btn btn-primary" onclick="toggleFlightMission()" style="background: #10B981; font-size: 16px; padding: 15px; margin-top: 20px;">
                             ▶ START MISSION & AI
                         </button>
                         
-                        <div id="flightLogTerminal" style="background: #0F172A; color: #38BDF8; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 6px; height: 180px; overflow-y: auto; margin-top: 15px; margin-bottom: auto;">
+                        <div id="flightLogTerminal" style="background: #0F172A; color: #38BDF8; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 6px; height: 150px; overflow-y: auto; margin-top: 15px;">
                             > GCS Cloud Link Established...<br>
                             > Awaiting pilot command...<br>
                         </div>
@@ -117,10 +215,12 @@
             <textarea id="modalBridgeRemarks" class="form-control" rows="3" placeholder="Additional notes or structure details..."></textarea>
             
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
-                <button class="btn" style="background: #94A3B8; color: white;" onclick="closeBridgeModal()">Cancel</button>
+                <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="closeBridgeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="saveBridge()">Save Bridge</button>
             </div>
         </div>
     </div>
+
+    <script src="script.js"></script>
 </body>
 </html>
