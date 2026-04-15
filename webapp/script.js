@@ -86,15 +86,12 @@ async function fetchDatabaseStats() {
     }
 }
 
-// --- INTELLIGENT BRIDGE HEALTH CALCULATOR ---
 function getBridgeHealth(bridge) {
     if (!bridge.missions || bridge.missions.length === 0) return 'Fair';
-    // Base health entirely on the most recent mission
     const latestMissionId = bridge.missions[0].id;
     const images = bridge.images || [];
     const latestImages = images.filter(img => img.mission_id === latestMissionId);
     
-    // If the latest mission has 0 images, it found no defects, therefore it is FAIR (Safe)
     if (latestImages.length === 0) return 'Fair';
     
     let health = 'Fair';
@@ -112,7 +109,6 @@ function getBridgeHealth(bridge) {
     }
     return health;
 }
-
 
 // --- ADD/EDIT BRIDGE LOGIC ---
 function openBridgeModal(db_id = null) {
@@ -315,7 +311,6 @@ function showBridgeDetails(bridge) {
         document.getElementById('bridgeRemarks').value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
     }
 
-    // Chart logic
     let latestMissionIdLabel = 'Unknown';
     let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
     
@@ -353,7 +348,6 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // Populate the Historical Missions Grid (INCLUDING empty missions)
     const missionGrid = document.getElementById('missionListGrid');
     missionGrid.innerHTML = '';
     
@@ -380,7 +374,6 @@ function showBridgeDetails(bridge) {
         if (urgentCount > 0) {
             urgentBadge = `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>`;
         } else if (mImgs.length === 0) {
-            // Explicitly note that the mission was completed but no defects were found
             urgentBadge = `<span style="color:#10b981; font-size:12px; display:block; margin-top:3px;">✅ No Defects Detected</span>`;
         }
 
@@ -460,7 +453,6 @@ function renderImageGallery(images) {
     const container = document.getElementById('galleryContainer');
     container.innerHTML = '';
     
-    // Explicitly handle 0 defects
     if (!images || images.length === 0) {
         container.innerHTML = '<p class="text-muted" style="padding: 20px; background: #fff; border-radius: 8px;">✅ Mission completely clean. No defects to display.</p>';
         return;
@@ -545,14 +537,12 @@ function setFlightSpan(span, btnElement) {
     logToTerminal(`> Target Zone set to: ${span}`, '#38BDF8');
 }
 
-// Automatically switch between Raw Live feeds (during mission) and AI results (after mission)
 async function fetchLiveCaptures() {
     if (!currentActiveMission) return;
     try {
         const gallery = document.getElementById('liveCaptureGallery');
         
         if (isFlightActive) {
-            // DURING FLIGHT: Fetch the raw frames being taken by the automated camera
             const res = await fetch(`/api/mission/${currentActiveMission}/live_frames`);
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
@@ -565,7 +555,6 @@ async function fetchLiveCaptures() {
                 `).join('');
             }
         } else {
-            // AFTER FLIGHT: Fetch the annotated AI captures
             const res = await fetch(`/api/mission/${currentActiveMission}/captures`);
             const data = await res.json();
             
@@ -579,13 +568,10 @@ async function fetchLiveCaptures() {
                         </div>
                     `).join('');
                 } else {
-                    // Check if the backend is still processing or if it finished and found nothing
                     const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
                     const statusData = await statusRes.json();
                     if (statusData.status === 'Completed') {
                         gallery.innerHTML = '<p class="text-muted" style="margin-top: 10px;">✅ Mission Processed. No defects detected.</p>';
-                    } else {
-                        gallery.innerHTML = '<p class="text-muted" style="margin-top: 10px;">⚙️ Processing AI Batch Data...</p>';
                     }
                 }
             }
@@ -597,6 +583,11 @@ async function toggleFlightMission() {
     const btn = document.getElementById('toggleMissionBtn');
     const bridgeSelect = document.getElementById('flightBridgeSelect');
     const spanInput = document.getElementById('flightSpanInput');
+    
+    // UI Elements for Progress Bar
+    const progressContainer = document.getElementById('aiProgressBarContainer');
+    const progressBar = document.getElementById('aiProgressBar');
+    const progressText = document.getElementById('aiProgressText');
 
     if (!isFlightActive) {
         // --- START MISSION ---
@@ -631,19 +622,37 @@ async function toggleFlightMission() {
         btn.innerHTML = '⚙️ PROCESSING AI...';
         btn.disabled = true;
         btn.style.background = '#F59E0B'; 
+        
+        // Show and Reset the Progress Bar
+        progressContainer.style.display = 'block';
+        progressText.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressText.innerText = '0% Complete';
+
         logToTerminal(`> Mission complete. AI chewing through raw photos...`, '#F59E0B');
         
         try {
             await fetch('/api/mission/stop', { method: 'POST' });
             isFlightActive = false;
             
-            // Poll the backend every 2 seconds to see if the Batch Processor is finished
+            // INCREASED POLLING SPEED to 1 Second for a much smoother animated progress bar
             const pollInterval = setInterval(async () => {
                 const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
                 const statusData = await statusRes.json();
                 
+                // Animate Progress Bar Real-Time
+                if (statusData.status === 'Processing') {
+                    progressBar.style.width = `${statusData.progress}%`;
+                    progressText.innerText = `Analyzing Images: ${statusData.progress}% Complete`;
+                    btn.innerHTML = `⚙️ PROCESSING AI... ${statusData.progress}%`;
+                }
+                
                 if(statusData.status === 'Completed') {
                     clearInterval(pollInterval);
+                    
+                    // Hide progress UI and reset Button
+                    progressContainer.style.display = 'none';
+                    progressText.style.display = 'none';
                     btn.disabled = false;
                     btn.innerHTML = '▶ START MISSION';
                     btn.style.background = '#10B981';
@@ -655,11 +664,13 @@ async function toggleFlightMission() {
                     currentActiveMission = null;
                     bridgeSelect.disabled = false;
                 }
-            }, 2000);
+            }, 1000); // 1000ms = 1 second
             
         } catch (e) {
             logToTerminal(`> ERROR stopping mission: ${e}`, '#EF4444');
             btn.disabled = false;
+            progressContainer.style.display = 'none';
+            progressText.style.display = 'none';
         }
     }
 }

@@ -26,7 +26,6 @@ cloudinary.config(
 
 RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interchange.proxy.rlwy.net:21621/railway"
 
-# Temporary folder for live raw flight frames
 TEMP_DIR = "temp_mission_frames"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
@@ -76,6 +75,7 @@ flight_state = {
     "bridge_id": None,
     "span_target": "Span 1",
     "latest_raw_frame": None,
+    "mission_progress": {} # NEW: Tracks live AI processing percentage
 }
 state_lock = threading.Lock()
 
@@ -95,26 +95,15 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
         return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- BACKGROUND AUTO-CAPTURE WORKER ---
-def auto_capture_worker():
-    while True:
-        with state_lock:
-            is_active = flight_state["is_active"]
-            raw_frame = flight_state["latest_raw_frame"]
-            m_id = flight_state["mission_id"]
-            
-        if is_active and raw_frame is not None:
-            timestamp = int(time.time() * 1000)
-            filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}.jpg")
-            cv2.imwrite(filepath, raw_frame)
-            
-        time.sleep(2.0)
-
-threading.Thread(target=auto_capture_worker, daemon=True).start()
-
 # --- POST-MISSION BATCH AI PROCESSOR ---
 def post_mission_ai_processor(mission_id, span_target):
     files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
+    total_files = len(files)
+    
+    # Initialize Progress Tracker
+    with state_lock:
+        flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
+
     captured_track_ids = set()
     MM_PER_PIXEL = 0.2
     
@@ -173,6 +162,10 @@ def post_mission_ai_processor(mission_id, span_target):
                             
         try: os.remove(filepath)
         except: pass
+        
+        # Update progress dynamically after each image
+        with state_lock:
+            flight_state["mission_progress"][mission_id]["processed"] += 1
             
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
@@ -183,11 +176,30 @@ def post_mission_ai_processor(mission_id, span_target):
         conn.close()
     except Exception as e:
         print("DB Status Update failed", e)
-
+        
+    # Clean up the tracker memory
+    with state_lock:
+        if mission_id in flight_state["mission_progress"]:
+            del flight_state["mission_progress"][mission_id]
 
 # ==========================================
 # UPLINK AND DOWNLINK (VIDEO STREAMING)
 # ==========================================
+@app.post("/api/uplink/highres")
+async def receive_highres_frame(request: Request):
+    with state_lock:
+        is_active = flight_state["is_active"]
+        m_id = flight_state["mission_id"]
+
+    if is_active and m_id is not None:
+        frame_bytes = await request.body()
+        timestamp = int(time.time() * 1000)
+        filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}.jpg")
+        with open(filepath, "wb") as f:
+            f.write(frame_bytes)
+            
+    return {"status": "received"}
+
 @app.websocket("/api/uplink/stream")
 async def websocket_uplink(websocket: WebSocket):
     await websocket.accept()
@@ -278,6 +290,7 @@ def stop_mission():
             
     return {"status": "success"}
 
+# --- NEW: Fetches the Live Percentage ---
 @app.get("/api/mission/{mission_id}/status")
 def get_mission_status(mission_id: int):
     try:
@@ -287,7 +300,21 @@ def get_mission_status(mission_id: int):
         res = cursor.fetchone()
         cursor.close()
         conn.close()
-        return {"status": res[0] if res else "Unknown"}
+        
+        status_str = res[0] if res else "Unknown"
+        progress = 0
+        
+        # Calculate percentage if currently processing
+        if status_str == 'Processing':
+            with state_lock:
+                prog_data = flight_state["mission_progress"].get(mission_id)
+                if prog_data:
+                    if prog_data["total"] > 0:
+                        progress = int((prog_data["processed"] / prog_data["total"]) * 100)
+                    else:
+                        progress = 100
+        
+        return {"status": status_str, "progress": progress}
     except Exception as e:
         return {"status": "error"}
 
@@ -308,7 +335,6 @@ def get_mission_captures(mission_id: int):
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
-# NEW ENDPOINT: Serves the raw automated frames directly from TEMP_DIR to the web UI
 @app.get("/api/mission/{mission_id}/live_frames")
 def get_live_frames(mission_id: int):
     try:
@@ -319,7 +345,7 @@ def get_live_frames(mission_id: int):
         return {"status": "error", "detail": str(e)}
 
 # ==========================================
-# DATABASE CRUD ENDPOINTS
+# DATABASE CRUD ENDPOINTS 
 # ==========================================
 @app.post("/api/bridges")
 def add_bridge(bridge: BridgeCreateUpdate):
@@ -374,7 +400,6 @@ def get_bridge_data():
         for b in db_bridges:
             bridge_id = b[0]
             
-            # Fetch ALL missions for this bridge, regardless of whether they have images!
             cursor.execute("SELECT id, status FROM inspection_missions WHERE bridge_id = %s ORDER BY id DESC", (bridge_id,))
             bridge_missions = [{"id": m[0], "status": m[1]} for m in cursor.fetchall()]
             
@@ -461,7 +486,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 web_path = os.path.join(BASE_DIR, "webapp")
 if not os.path.exists(web_path): os.makedirs(web_path)
 
-# Ensure the temp frames directory is publicly mounted so the frontend can display them
 app.mount("/temp_frames", StaticFiles(directory=TEMP_DIR), name="temp_frames")
 app.mount("/", StaticFiles(directory=web_path, html=True), name="web")
 
