@@ -26,7 +26,7 @@ cloudinary.config(
 
 RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interchange.proxy.rlwy.net:21621/railway"
 
-# Create a temporary folder to hold photos during the flight
+# Temporary folder for live raw flight frames
 TEMP_DIR = "temp_mission_frames"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
@@ -95,9 +95,8 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
         return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- NEW: BACKGROUND AUTO-CAPTURE WORKER (RUNS DURING FLIGHT) ---
+# --- BACKGROUND AUTO-CAPTURE WORKER ---
 def auto_capture_worker():
-    # Takes a silent photo every 2 seconds while the drone is flying
     while True:
         with state_lock:
             is_active = flight_state["is_active"]
@@ -109,13 +108,12 @@ def auto_capture_worker():
             filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}.jpg")
             cv2.imwrite(filepath, raw_frame)
             
-        time.sleep(2.0) # <--- Change this number to capture photos faster or slower
+        time.sleep(2.0)
 
 threading.Thread(target=auto_capture_worker, daemon=True).start()
 
-# --- NEW: POST-MISSION BATCH AI PROCESSOR (RUNS AFTER FLIGHT) ---
+# --- POST-MISSION BATCH AI PROCESSOR ---
 def post_mission_ai_processor(mission_id, span_target):
-    # Gathers all photos taken during the mission
     files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
     captured_track_ids = set()
     MM_PER_PIXEL = 0.2
@@ -125,18 +123,14 @@ def post_mission_ai_processor(mission_id, span_target):
         frame = cv2.imread(filepath)
         
         if frame is not None and model is not None:
-            # Run YOLO AI on the photo
             results = model.track(frame, conf=0.5, imgsz=320, persist=True, tracker="bytetrack.yaml", verbose=False)
             boxes = results[0].boxes
             
-            # IF DEFECTS ARE DETECTED
             if boxes is not None and len(boxes) > 0:
-                # If tracker loses ID, assign a fallback timestamp ID
                 track_ids = boxes.id.int().cpu().tolist() if boxes.id is not None else [int(time.time()*1000)+i for i in range(len(boxes))]
                 has_new_defect = False
                 capture_frame = frame.copy()
                 
-                # Draw boxes for all detected defects
                 for i in range(len(boxes)):
                     track_id = track_ids[i]
                     if track_id not in captured_track_ids:
@@ -155,7 +149,6 @@ def post_mission_ai_processor(mission_id, span_target):
                         cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                         cv2.putText(capture_frame, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 
-                # ONLY UPLOAD IF A NEW DEFECT WAS FOUND
                 if has_new_defect:
                     tmp_path = f"upload_{mission_id}_{int(time.time()*1000)}.jpg"
                     cv2.imwrite(tmp_path, capture_frame)
@@ -178,11 +171,9 @@ def post_mission_ai_processor(mission_id, span_target):
                         if os.path.exists(tmp_path):
                             os.remove(tmp_path)
                             
-        # DELETE THE RAW PHOTO REGARDLESS (Only annotated ones with defects were saved to Cloudinary)
         try: os.remove(filepath)
         except: pass
             
-    # Mark the mission as officially 'Completed' in the Database
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
@@ -197,7 +188,6 @@ def post_mission_ai_processor(mission_id, span_target):
 # ==========================================
 # UPLINK AND DOWNLINK (VIDEO STREAMING)
 # ==========================================
-
 @app.websocket("/api/uplink/stream")
 async def websocket_uplink(websocket: WebSocket):
     await websocket.accept()
@@ -221,7 +211,6 @@ def get_standby_frame():
     return frame
 
 def generate_mjpeg_stream():
-    # Because we removed the live AI drawing, this stream is now pure hardware video! Zero Lag!
     while True:
         with state_lock:
             frame = flight_state["latest_raw_frame"]
@@ -283,7 +272,6 @@ def stop_mission():
             cursor.close()
             conn.close()
             
-            # Start the AI Background Batch Processor
             threading.Thread(target=post_mission_ai_processor, args=(m_id, span_target)).start()
         except Exception as e:
             print("Failed to trigger processing:", e)
@@ -320,8 +308,18 @@ def get_mission_captures(mission_id: int):
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
+# NEW ENDPOINT: Serves the raw automated frames directly from TEMP_DIR to the web UI
+@app.get("/api/mission/{mission_id}/live_frames")
+def get_live_frames(mission_id: int):
+    try:
+        files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")], reverse=True)[:6]
+        frames = [{"url": f"/temp_frames/{f}"} for f in files]
+        return {"status": "success", "frames": frames}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 # ==========================================
-# DATABASE CRUD ENDPOINTS (No Changes Needed Here)
+# DATABASE CRUD ENDPOINTS
 # ==========================================
 @app.post("/api/bridges")
 def add_bridge(bridge: BridgeCreateUpdate):
@@ -375,6 +373,11 @@ def get_bridge_data():
         bridge_list = []
         for b in db_bridges:
             bridge_id = b[0]
+            
+            # Fetch ALL missions for this bridge, regardless of whether they have images!
+            cursor.execute("SELECT id, status FROM inspection_missions WHERE bridge_id = %s ORDER BY id DESC", (bridge_id,))
+            bridge_missions = [{"id": m[0], "status": m[1]} for m in cursor.fetchall()]
+            
             cursor.execute("""
                 SELECT severity_level, COUNT(*) FROM captured_images 
                 JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id
@@ -401,7 +404,8 @@ def get_bridge_data():
 
             bridge_list.append({
                 "db_id": bridge_id, "id": b[1], "name": b[2],
-                "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery
+                "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, 
+                "images": image_gallery, "missions": bridge_missions
             })
 
         cursor.close()
@@ -456,6 +460,9 @@ def update_bridge_remarks(bridge_id: int, update_data: RemarkUpdate):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 web_path = os.path.join(BASE_DIR, "webapp")
 if not os.path.exists(web_path): os.makedirs(web_path)
+
+# Ensure the temp frames directory is publicly mounted so the frontend can display them
+app.mount("/temp_frames", StaticFiles(directory=TEMP_DIR), name="temp_frames")
 app.mount("/", StaticFiles(directory=web_path, html=True), name="web")
 
 if __name__ == "__main__":

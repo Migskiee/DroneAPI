@@ -5,6 +5,7 @@ let liveBridgeData = [];
 let currentActiveBridge = null;
 let currentActiveMission = null; 
 let isFlightActive = false;
+let liveCaptureInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -84,6 +85,34 @@ async function fetchDatabaseStats() {
         console.error("Failed to connect to backend:", error);
     }
 }
+
+// --- INTELLIGENT BRIDGE HEALTH CALCULATOR ---
+function getBridgeHealth(bridge) {
+    if (!bridge.missions || bridge.missions.length === 0) return 'Fair';
+    // Base health entirely on the most recent mission
+    const latestMissionId = bridge.missions[0].id;
+    const images = bridge.images || [];
+    const latestImages = images.filter(img => img.mission_id === latestMissionId);
+    
+    // If the latest mission has 0 images, it found no defects, therefore it is FAIR (Safe)
+    if (latestImages.length === 0) return 'Fair';
+    
+    let health = 'Fair';
+    for (let img of latestImages) {
+        let sev = img.severity || 'Fair';
+        let defType = (img.defect_type || img.type || '').toLowerCase();
+        let isMajor = defType.includes('crack') || defType.includes('rebar');
+
+        if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
+            if (isMajor) { health = 'Bad'; break; }
+            else if (health !== 'Bad') health = 'Poor';
+        } else if (sev === 'Poor' || sev === 'Review Needed') {
+            if (health !== 'Bad') health = 'Poor';
+        }
+    }
+    return health;
+}
+
 
 // --- ADD/EDIT BRIDGE LOGIC ---
 function openBridgeModal(db_id = null) {
@@ -200,36 +229,7 @@ function renderAnalytics(stats) {
     let healthCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
 
     liveBridgeData.forEach(bridge => {
-        const imgs = bridge.images || [];
-        if (imgs.length === 0) {
-            healthCounts['Fair']++; 
-            return;
-        }
-
-        const missions = {};
-        imgs.forEach(img => {
-            const mId = img.mission_id || 0;
-            if (!missions[mId]) missions[mId] = [];
-            missions[mId].push(img);
-        });
-
-        const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-        const latestImages = missions[latestMissionId];
-
-        let bridgeHealth = 'Fair'; 
-        for (let img of latestImages) {
-            let sev = img.severity || 'Fair';
-            let defType = (img.defect_type || img.type || '').toLowerCase();
-            let isMajor = defType.includes('crack') || defType.includes('rebar');
-
-            if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                if (isMajor) { bridgeHealth = 'Bad'; break; } 
-                else { if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; }
-            } else if (sev === 'Poor' || sev === 'Review Needed') {
-                if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
-            }
-        }
-        healthCounts[bridgeHealth]++;
+        healthCounts[getBridgeHealth(bridge)]++;
     });
 
     document.getElementById('countHigh').innerText = healthCounts['Bad'];
@@ -258,33 +258,7 @@ function renderBridges(bridges) {
     bridgeGrid.innerHTML = ''; 
     
     bridges.forEach(bridge => {
-        let bridgeHealth = 'Fair';
-        const imgs = bridge.images || [];
-
-        if (imgs.length > 0) {
-            const missions = {};
-            imgs.forEach(img => {
-                const mId = img.mission_id || 0;
-                if (!missions[mId]) missions[mId] = [];
-                missions[mId].push(img);
-            });
-
-            const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-            const latestImages = missions[latestMissionId];
-
-            for (let img of latestImages) {
-                let sev = img.severity || 'Fair';
-                let defType = (img.defect_type || img.type || '').toLowerCase();
-                let isMajor = defType.includes('crack') || defType.includes('rebar');
-
-                if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                    if (isMajor) { bridgeHealth = 'Bad'; break; } 
-                    else { if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; }
-                } else if (sev === 'Poor' || sev === 'Review Needed') {
-                    if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
-                }
-            }
-        }
+        let bridgeHealth = getBridgeHealth(bridge);
 
         let badgeClass = 'badge-fair'; let badgeText = 'Fair';
         if (bridgeHealth === 'Bad') { badgeClass = 'badge-bad'; badgeText = 'Bad'; } 
@@ -324,39 +298,7 @@ function showBridgeDetails(bridge) {
     document.getElementById('detailLocation').innerText = bridge.location;
     document.getElementById('detailId').innerText = bridge.id;
 
-    let bridgeHealth = 'Fair'; 
-    const imgs = bridge.images || [];
-    let latestImages = [];
-    let latestMissionIdLabel = 'Unknown';
-    
-    if (imgs.length > 0) {
-        const missions = {};
-        imgs.forEach(img => {
-            const mId = img.mission_id || 0;
-            if (!missions[mId]) missions[mId] = [];
-            missions[mId].push(img);
-        });
-
-        const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-        latestImages = missions[latestMissionId];
-        latestMissionIdLabel = latestMissionId === 0 ? 'Unassigned' : latestMissionId;
-
-        for (let img of latestImages) {
-            let sev = img.severity || 'Fair';
-            let defType = (img.defect_type || img.type || '').toLowerCase();
-            let isMajor = defType.includes('crack') || defType.includes('rebar');
-
-            if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                if (isMajor) { bridgeHealth = 'Bad'; break; } 
-                else { if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; }
-            } else if (sev === 'Poor' || sev === 'Review Needed') {
-                if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
-            }
-        }
-    }
-
-    const descElement = document.getElementById('latestMissionChartDesc');
-    if(descElement) descElement.innerText = imgs.length > 0 ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
+    let bridgeHealth = getBridgeHealth(bridge); 
 
     const badge = document.getElementById('bridgeConditionBadge');
     if (bridgeHealth === 'Bad') {
@@ -373,13 +315,25 @@ function showBridgeDetails(bridge) {
         document.getElementById('bridgeRemarks').value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
     }
 
+    // Chart logic
+    let latestMissionIdLabel = 'Unknown';
     let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
-    latestImages.forEach(img => {
-        let severity = img.severity || 'Fair';
-        if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
-        else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
-        else severityCounts['Fair']++; 
-    });
+    
+    if (bridge.missions && bridge.missions.length > 0) {
+        const latestMissionId = bridge.missions[0].id;
+        latestMissionIdLabel = latestMissionId;
+        const latestImages = (bridge.images || []).filter(img => img.mission_id === latestMissionId);
+        
+        latestImages.forEach(img => {
+            let severity = img.severity || 'Fair';
+            if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
+            else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
+            else severityCounts['Fair']++; 
+        });
+    }
+
+    const descElement = document.getElementById('latestMissionChartDesc');
+    if(descElement) descElement.innerText = (bridge.missions && bridge.missions.length > 0) ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
 
     let labels = [], chartData = [], colors = [];
     for (const [sev, count] of Object.entries(severityCounts)) {
@@ -399,33 +353,42 @@ function showBridgeDetails(bridge) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
+    // Populate the Historical Missions Grid (INCLUDING empty missions)
+    const missionGrid = document.getElementById('missionListGrid');
+    missionGrid.innerHTML = '';
+    
+    if (!bridge.missions || bridge.missions.length === 0) {
+        missionGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No flight missions logged for this bridge yet.</p>';
+        return;
+    }
+
     const groupedByMission = {};
-    imgs.forEach(img => {
+    (bridge.images || []).forEach(img => {
         const mId = img.mission_id || 'Unassigned';
         if (!groupedByMission[mId]) groupedByMission[mId] = [];
         groupedByMission[mId].push(img);
     });
 
-    const missionGrid = document.getElementById('missionListGrid');
-    missionGrid.innerHTML = '';
-    if (Object.keys(groupedByMission).length === 0) {
-        missionGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No flight missions logged for this bridge yet.</p>';
-        return;
-    }
-
-    const sortedMissions = Object.keys(groupedByMission).sort((a,b) => b - a);
-    sortedMissions.forEach(mId => {
-        const mImgs = groupedByMission[mId];
-        const label = mId === 'Unassigned' ? 'Unassigned Captures' : `Mission #${mId}`;
-        const dateStr = mImgs[0] && (mImgs[0].date || mImgs[0].captured_at) ? new Date(mImgs[0].date || mImgs[0].captured_at).toLocaleDateString() : 'Recent';
+    bridge.missions.forEach(mission => {
+        const mId = mission.id;
+        const mImgs = groupedByMission[mId] || [];
+        const label = `Mission #${mId}`;
+        
         const urgentCount = mImgs.filter(i => i.severity === 'Bad' || i.severity === 'Critical' || i.severity === 'High').length;
-        const urgentBadge = urgentCount > 0 ? `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>` : '';
+        let urgentBadge = '';
+        
+        if (urgentCount > 0) {
+            urgentBadge = `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>`;
+        } else if (mImgs.length === 0) {
+            // Explicitly note that the mission was completed but no defects were found
+            urgentBadge = `<span style="color:#10b981; font-size:12px; display:block; margin-top:3px;">✅ No Defects Detected</span>`;
+        }
 
         const card = document.createElement('div');
         card.className = 'mission-card';
         card.onclick = () => showMissionDetails(mId);
         card.innerHTML = `
-            <div><div class="mission-card-title">🚁 ${label}</div><div class="mission-card-subtitle">Flight Date: ${dateStr}</div>${urgentBadge}</div>
+            <div><div class="mission-card-title">🚁 ${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
             <div class="mission-card-stats">${mImgs.length} Images</div>
         `;
         missionGrid.appendChild(card);
@@ -439,12 +402,17 @@ function showMissionDetails(missionId) {
     document.getElementById('bridgeDetailView').style.display = 'none';
     document.getElementById('missionDetailView').style.display = 'block';
 
-    const missionLabel = missionId === 'Unassigned' ? 'Unassigned Captures' : `Flight Mission #${missionId}`;
+    const missionLabel = `Flight Mission #${missionId}`;
     document.getElementById('missionDetailTitle').innerText = missionLabel;
 
     const allImages = currentActiveBridge.images || [];
-    const missionImages = allImages.filter(img => String(img.mission_id || 'Unassigned') === String(missionId));
-    document.getElementById('missionDetailSubtitle').innerText = `${missionImages.length} Data points captured for ${currentActiveBridge.name}`;
+    const missionImages = allImages.filter(img => String(img.mission_id) === String(missionId));
+    
+    if(missionImages.length === 0) {
+         document.getElementById('missionDetailSubtitle').innerText = `✅ Clean Inspection: No structural defects detected during this mission.`;
+    } else {
+         document.getElementById('missionDetailSubtitle').innerText = `${missionImages.length} Data points captured for ${currentActiveBridge.name}`;
+    }
 
     let severityCounts = { 'Bad':0, 'Poor':0, 'Fair':0 };
     missionImages.forEach(img => {
@@ -479,7 +447,7 @@ function showMissionDetails(missionId) {
 function applyGalleryFilters() {
     if (!currentActiveBridge || !currentActiveMission) return;
     const allImages = currentActiveBridge.images || [];
-    const missionImages = allImages.filter(img => String(img.mission_id || 'Unassigned') === String(currentActiveMission));
+    const missionImages = allImages.filter(img => String(img.mission_id) === String(currentActiveMission));
     const selectedType = document.getElementById('filterType').value.toLowerCase();
     const filteredImages = missionImages.filter(img => {
         const imgType = (img.defect_type || img.type || 'Unknown').toLowerCase();
@@ -491,8 +459,10 @@ function applyGalleryFilters() {
 function renderImageGallery(images) {
     const container = document.getElementById('galleryContainer');
     container.innerHTML = '';
+    
+    // Explicitly handle 0 defects
     if (!images || images.length === 0) {
-        container.innerHTML = '<p class="text-muted" style="padding: 20px; background: #fff; border-radius: 8px;">No images match your current filter.</p>';
+        container.innerHTML = '<p class="text-muted" style="padding: 20px; background: #fff; border-radius: 8px;">✅ Mission completely clean. No defects to display.</p>';
         return;
     }
 
@@ -575,21 +545,50 @@ function setFlightSpan(span, btnElement) {
     logToTerminal(`> Target Zone set to: ${span}`, '#38BDF8');
 }
 
+// Automatically switch between Raw Live feeds (during mission) and AI results (after mission)
 async function fetchLiveCaptures() {
     if (!currentActiveMission) return;
     try {
-        const res = await fetch(`/api/mission/${currentActiveMission}/captures`);
-        const data = await res.json();
+        const gallery = document.getElementById('liveCaptureGallery');
         
-        if (data.status === 'success' && data.captures.length > 0) {
-            const gallery = document.getElementById('liveCaptureGallery');
-            gallery.innerHTML = data.captures.map(c => `
-                <div class="live-capture-card">
-                    <span class="health-badge ${c.severity.toLowerCase() === 'bad' ? 'badge-bad' : c.severity.toLowerCase() === 'poor' ? 'badge-poor' : 'badge-fair'}" style="position: absolute; top: 5px; right: 5px;">${c.severity}</span>
-                    <img src="${c.image_url}" alt="Defect">
-                    <div class="live-capture-info">${c.defect_type}</div>
-                </div>
-            `).join('');
+        if (isFlightActive) {
+            // DURING FLIGHT: Fetch the raw frames being taken by the automated camera
+            const res = await fetch(`/api/mission/${currentActiveMission}/live_frames`);
+            const data = await res.json();
+            if (data.status === 'success' && data.frames.length > 0) {
+                gallery.innerHTML = data.frames.map(f => `
+                    <div class="live-capture-card">
+                        <span class="health-badge badge-fair" style="position: absolute; top: 5px; right: 5px;">Raw Frame</span>
+                        <img src="${f.url}" alt="Raw Capture">
+                        <div class="live-capture-info">Auto-Capture</div>
+                    </div>
+                `).join('');
+            }
+        } else {
+            // AFTER FLIGHT: Fetch the annotated AI captures
+            const res = await fetch(`/api/mission/${currentActiveMission}/captures`);
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                if (data.captures.length > 0) {
+                    gallery.innerHTML = data.captures.map(c => `
+                        <div class="live-capture-card">
+                            <span class="health-badge ${c.severity.toLowerCase() === 'bad' ? 'badge-bad' : c.severity.toLowerCase() === 'poor' ? 'badge-poor' : 'badge-fair'}" style="position: absolute; top: 5px; right: 5px;">${c.severity}</span>
+                            <img src="${c.image_url}" alt="Defect">
+                            <div class="live-capture-info">${c.defect_type}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    // Check if the backend is still processing or if it finished and found nothing
+                    const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
+                    const statusData = await statusRes.json();
+                    if (statusData.status === 'Completed') {
+                        gallery.innerHTML = '<p class="text-muted" style="margin-top: 10px;">✅ Mission Processed. No defects detected.</p>';
+                    } else {
+                        gallery.innerHTML = '<p class="text-muted" style="margin-top: 10px;">⚙️ Processing AI Batch Data...</p>';
+                    }
+                }
+            }
         }
     } catch(e) { console.error("Capture sync error:", e); }
 }
@@ -623,14 +622,15 @@ async function toggleFlightMission() {
                 logToTerminal(`> MISSION #${data.mission_id} INITIATED. Auto-Capture ARMED.`, '#22C55E');
                 logToTerminal(`> Taking raw photos silently in background...`, '#FACC15');
 
-                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Capturing raw frames... AI batch process will begin after mission ends.</p>';
+                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Capturing raw frames...</p>';
+                liveCaptureInterval = setInterval(fetchLiveCaptures, 2000);
             }
         } catch (e) { logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444'); }
     } else {
         // --- STOP MISSION & RUN BATCH PROCESSOR ---
         btn.innerHTML = '⚙️ PROCESSING AI...';
         btn.disabled = true;
-        btn.style.background = '#F59E0B'; // Orange Loading State
+        btn.style.background = '#F59E0B'; 
         logToTerminal(`> Mission complete. AI chewing through raw photos...`, '#F59E0B');
         
         try {
@@ -645,7 +645,7 @@ async function toggleFlightMission() {
                 if(statusData.status === 'Completed') {
                     clearInterval(pollInterval);
                     btn.disabled = false;
-                    btn.innerHTML = '▶ START MISSION & AI';
+                    btn.innerHTML = '▶ START MISSION';
                     btn.style.background = '#10B981';
                     
                     logToTerminal(`> AI Processing Complete! Filtering and saving defects to Database.`, '#22C55E');
