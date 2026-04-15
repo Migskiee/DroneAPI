@@ -37,6 +37,12 @@ except Exception as e:
 
 app = FastAPI()
 
+class BridgeCreateUpdate(BaseModel):
+    bridge_code: str
+    name: str
+    location: str
+    remarks: str
+
 class SeverityUpdate(BaseModel):
     severity: str
 
@@ -46,12 +52,6 @@ class RemarkUpdate(BaseModel):
 class MissionStartParams(BaseModel):
     bridge_id: int
     span_target: str
-
-class BridgeCreateUpdate(BaseModel):
-    bridge_code: str
-    name: str
-    location: str
-    remarks: str
 
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
@@ -69,7 +69,7 @@ flight_state = {
     "bridge_id": None,
     "span_target": "Span 1",
     "latest_raw_frame": None,
-    "latest_annotated_frame": None,
+    "latest_detections": [], # FIX: Decoupled bounding boxes
     "captured_track_ids": set()
 }
 state_lock = threading.Lock()
@@ -104,6 +104,8 @@ def ai_processing_worker():
             results = model.track(frame_to_analyze, conf=0.5, imgsz=320, persist=True, tracker="bytetrack.yaml", verbose=False)
             boxes = results[0].boxes
             
+            new_detections = []
+            
             if boxes is not None and len(boxes) > 0 and boxes.id is not None:
                 track_ids = boxes.id.int().cpu().tolist()
                 
@@ -118,13 +120,21 @@ def ai_processing_worker():
                     severity = assess_defect_severity(defect_type, width_mm, height_mm)
                     
                     box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
-                    cv2.rectangle(frame_to_analyze, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
-                    cv2.putText(frame_to_analyze, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    
+                    # Store data to be drawn cleanly over the high-speed video
+                    new_detections.append({
+                        "x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2),
+                        "defect_type": defect_type, "severity": severity, "color": box_color
+                    })
 
                     if track_id not in flight_state["captured_track_ids"]:
                         flight_state["captured_track_ids"].add(track_id)
+                        
+                        # Draw boxes just for the saved picture
+                        capture_frame = frame_to_analyze.copy()
+                        cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                         tmp_path = f"tmp_defect_{track_id}.jpg"
-                        cv2.imwrite(tmp_path, frame_to_analyze)
+                        cv2.imwrite(tmp_path, capture_frame)
                         
                         try:
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
@@ -146,9 +156,9 @@ def ai_processing_worker():
                                 os.remove(tmp_path)
 
             with state_lock:
-                flight_state["latest_annotated_frame"] = frame_to_analyze
+                flight_state["latest_detections"] = new_detections
                 
-        time.sleep(0.5)
+        time.sleep(0.1)
 
 threading.Thread(target=ai_processing_worker, daemon=True).start()
 
@@ -157,32 +167,24 @@ threading.Thread(target=ai_processing_worker, daemon=True).start()
 # UPLINK AND DOWNLINK (VIDEO STREAMING)
 # ==========================================
 
-# --- 1. UPLINK: RECEIVE VIDEO FROM RASPBERRY PI ---
 @app.websocket("/api/uplink/stream")
 async def websocket_uplink(websocket: WebSocket):
     await websocket.accept()
     print("Drone connected via High-Speed WebSocket!")
     try:
         while True:
-            # Receive raw bytes pouring in from the drone
             frame_bytes = await websocket.receive_bytes()
-            
-            # Decode and update the state
             np_arr = np.frombuffer(frame_bytes, np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             
             if frame is not None:
                 with state_lock:
                     flight_state["latest_raw_frame"] = frame
-                    if not flight_state["is_active"] or model is None:
-                        flight_state["latest_annotated_frame"] = frame
                         
     except WebSocketDisconnect:
         print("Drone WebSocket disconnected.")
 
-# --- 2. DOWNLINK: STREAM TO WEB DASHBOARD ---
 def get_standby_frame():
-    # Creates a blank black image with yellow standby text
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     cv2.putText(frame, "AWAITING DRONE UPLINK...", (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
     return frame
@@ -190,18 +192,26 @@ def get_standby_frame():
 def generate_mjpeg_stream():
     while True:
         with state_lock:
-            frame = flight_state["latest_annotated_frame"]
+            frame = flight_state["latest_raw_frame"]
+            detections = flight_state["latest_detections"]
+            is_active = flight_state["is_active"]
             
-        # THE FIX: If the drone hasn't sent a frame yet, send the Standby screen
         if frame is None:
-            frame = get_standby_frame()
+            frame_to_stream = get_standby_frame()
+        else:
+            frame_to_stream = frame.copy()
+            # Overlay the AI boxes dynamically without pausing the video!
+            if is_active:
+                for det in detections:
+                    cv2.rectangle(frame_to_stream, (det['x1'], det['y1']), (det['x2'], det['y2']), det['color'], 2)
+                    cv2.putText(frame_to_stream, f"{det['defect_type']} [{det['severity']}]", (det['x1'], det['y1'] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
-        ret, buffer = cv2.imencode('.jpg', frame)
+        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 @app.get("/video_feed")
 def video_feed():
@@ -209,7 +219,7 @@ def video_feed():
 
 
 # ==========================================
-# FLIGHT CONTROL ENDPOINTS
+# FLIGHT CONTROL & LIVE CAPTURE ENDPOINTS
 # ==========================================
 @app.post("/api/mission/start")
 def start_mission(params: MissionStartParams):
@@ -228,6 +238,7 @@ def start_mission(params: MissionStartParams):
             flight_state["bridge_id"] = params.bridge_id
             flight_state["span_target"] = params.span_target
             flight_state["captured_track_ids"].clear()
+            flight_state["latest_detections"] = []
 
         return {"status": "success", "mission_id": m_id}
     except Exception as e:
@@ -248,15 +259,30 @@ def stop_mission():
             cursor.close()
             conn.close()
         except Exception as e:
-            print("Failed to update mission status:", e)
+            pass
             
     return {"status": "success"}
+
+@app.get("/api/mission/{mission_id}/captures")
+def get_mission_captures(mission_id: int):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, defect_type, severity_level, image_url, captured_at
+            FROM captured_images WHERE mission_id = %s ORDER BY captured_at DESC LIMIT 6
+        """, (mission_id,))
+        rows = cursor.fetchall()
+        captures = [{"id": r[0], "defect_type": r[1], "severity": r[2], "image_url": r[3], "date": r[4]} for r in rows]
+        cursor.close()
+        conn.close()
+        return {"status": "success", "captures": captures}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 # ==========================================
 # DATABASE CRUD ENDPOINTS
 # ==========================================
-
-# --- NEW: ADD A BRIDGE ---
 @app.post("/api/bridges")
 def add_bridge(bridge: BridgeCreateUpdate):
     try:
@@ -274,7 +300,6 @@ def add_bridge(bridge: BridgeCreateUpdate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- NEW: EDIT A BRIDGE ---
 @app.put("/api/bridges/{bridge_id}")
 def update_bridge(bridge_id: int, bridge: BridgeCreateUpdate):
     try:

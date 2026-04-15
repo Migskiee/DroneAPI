@@ -1,10 +1,9 @@
 let globalChartInstance = null;
 let detailChartInstance = null;
-let missionChartInstance = null; 
 let liveBridgeData = []; 
-let currentActiveBridge = null;
 let currentActiveMission = null; 
 let isFlightActive = false;
+let liveCaptureInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -34,465 +33,50 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
-async function fetchDatabaseStats() {
-    try {
-        const response = await fetch('/api/bridge-data');
-        const data = await response.json();
-
-        if (data.status === "success") {
-            liveBridgeData = data.bridges;
-            renderAnalytics(data.stats);
-            renderBridges(liveBridgeData);
-            populateFlightDropdown();
-            
-            if(currentActiveBridge) {
-                const refreshedBridge = liveBridgeData.find(b => b.db_id === currentActiveBridge.db_id);
-                if(refreshedBridge) {
-                    currentActiveBridge = refreshedBridge;
-                    if(currentActiveMission) {
-                        showMissionDetails(currentActiveMission);
-                    } else {
-                        showBridgeDetails(refreshedBridge);
-                    }
-                }
-            }
-        } else {
-            console.error("API Error:", data.message);
-        }
-    } catch (error) {
-        console.error("Failed to connect to backend:", error);
-    }
+// --- LIVE FLIGHT LOGIC ---
+function logToTerminal(msg, color) {
+    const term = document.getElementById('flightLogTerminal');
+    term.innerHTML += `<span style="color: ${color}">${msg}</span><br>`;
+    term.scrollTop = term.scrollHeight;
 }
 
-async function updateDefectSeverity(defectId, dropdownElement) {
-    const newSeverity = dropdownElement.value;
-    try {
-        const response = await fetch(`/api/defects/${defectId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ severity: newSeverity })
-        });
-        if(response.ok) fetchDatabaseStats(); 
-        else alert("Failed to update severity.");
-    } catch (e) { console.error("Update failed", e); }
+function setFlightSpan(span, btnElement) {
+    if(isFlightActive) return alert("Cannot change span while mission is active!");
+    document.getElementById('flightSpanInput').value = span;
+    document.querySelectorAll('.span-btn').forEach(b => b.classList.remove('active'));
+    btnElement.classList.add('active');
+    logToTerminal(`> Target Zone set to: ${span}`, '#38BDF8');
 }
 
-async function deleteDefect(defectId) {
-    if(!confirm("Are you sure you want to permanently delete this record?")) return;
+async function fetchLiveCaptures() {
+    if (!currentActiveMission) return;
     try {
-        const response = await fetch(`/api/defects/${defectId}`, { method: 'DELETE' });
-        if(response.ok) fetchDatabaseStats(); 
-        else alert("Failed to delete record.");
-    } catch (e) { console.error("Delete failed", e); }
-}
-
-async function saveBridgeRemarks() {
-    if (!currentActiveBridge) return;
-    const newRemarks = document.getElementById('bridgeRemarks').value;
-    const btn = document.querySelector('.btn-primary');
-    btn.innerText = "Saving...";
-    
-    try {
-        const response = await fetch(`/api/bridges/${currentActiveBridge.db_id}/remarks`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ remarks: newRemarks })
-        });
+        const res = await fetch(`/api/mission/${currentActiveMission}/captures`);
+        const data = await res.json();
         
-        if(response.ok) {
-            btn.innerText = "✅ Saved Successfully!";
-            fetchDatabaseStats(); 
-            setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
-        } else {
-            alert("Failed to save remarks to database.");
-            btn.innerText = "💾 Save Remarks";
-        }
-    } catch (e) {
-        console.error("Save failed", e);
-        btn.innerText = "💾 Save Remarks";
-    }
-}
-
-function renderAnalytics(stats) {
-    document.getElementById('totalBridgesValue').innerText = stats.total_bridges;
-    document.getElementById('totalDefectsValue').innerText = stats.total_defects;
-
-    let healthCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
-
-    liveBridgeData.forEach(bridge => {
-        const imgs = bridge.images || [];
-        if (imgs.length === 0) {
-            healthCounts['Fair']++; 
-            return;
-        }
-
-        const missions = {};
-        imgs.forEach(img => {
-            const mId = img.mission_id || 0;
-            if (!missions[mId]) missions[mId] = [];
-            missions[mId].push(img);
-        });
-
-        const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-        const latestImages = missions[latestMissionId];
-
-        let bridgeHealth = 'Fair'; 
-        for (let img of latestImages) {
-            let sev = img.severity || 'Fair';
-            let defType = (img.defect_type || img.type || '').toLowerCase();
-            let isMajor = defType.includes('crack') || defType.includes('rebar');
-
-            if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                if (isMajor) { bridgeHealth = 'Bad'; break; } 
-                else { if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; }
-            } else if (sev === 'Poor' || sev === 'Review Needed') {
-                if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
-            }
-        }
-        healthCounts[bridgeHealth]++;
-    });
-
-    document.getElementById('countHigh').innerText = healthCounts['Bad'];
-    document.getElementById('countReview').innerText = healthCounts['Poor'];
-    document.getElementById('countLow').innerText = healthCounts['Fair'];
-
-    const ctx = document.getElementById('globalConditionChart').getContext('2d');
-    if (globalChartInstance) globalChartInstance.destroy();
-    
-    globalChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: { 
-            labels: ['Bad (Critical)', 'Poor (Review)', 'Fair (Safe)'], 
-            datasets: [{ 
-                data: [healthCounts['Bad'], healthCounts['Poor'], healthCounts['Fair']], 
-                backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], 
-                borderWidth: 0 
-            }] 
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '65%' }
-    });
-}
-
-function renderBridges(bridges) {
-    const bridgeGrid = document.getElementById('bridgeGrid');
-    bridgeGrid.innerHTML = ''; 
-    
-    bridges.forEach(bridge => {
-        let bridgeHealth = 'Fair';
-        const imgs = bridge.images || [];
-
-        if (imgs.length > 0) {
-            const missions = {};
-            imgs.forEach(img => {
-                const mId = img.mission_id || 0;
-                if (!missions[mId]) missions[mId] = [];
-                missions[mId].push(img);
-            });
-
-            const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-            const latestImages = missions[latestMissionId];
-
-            for (let img of latestImages) {
-                let sev = img.severity || 'Fair';
-                let defType = (img.defect_type || img.type || '').toLowerCase();
-                let isMajor = defType.includes('crack') || defType.includes('rebar');
-
-                if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                    if (isMajor) { bridgeHealth = 'Bad'; break; } 
-                    else { if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; }
-                } else if (sev === 'Poor' || sev === 'Review Needed') {
-                    if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
-                }
-            }
-        }
-
-        let badgeClass = 'badge-fair'; let badgeText = 'Fair';
-        if (bridgeHealth === 'Bad') { badgeClass = 'badge-bad'; badgeText = 'Bad'; } 
-        else if (bridgeHealth === 'Poor') { badgeClass = 'badge-poor'; badgeText = 'Poor'; }
-
-        const card = document.createElement('div');
-        card.className = 'bridge-card';
-        card.onclick = () => showBridgeDetails(bridge);
-        card.innerHTML = `
-            <div class="bridge-info">
-                <h3>${bridge.name} <span class="health-badge ${badgeClass}">${badgeText}</span></h3>
-                <p>${bridge.location}</p>
-            </div>
-            <span class="bridge-id">${bridge.id}</span>
-        `;
-        bridgeGrid.appendChild(card);
-    });
-}
-
-function showBridgeList() {
-    currentActiveBridge = null; currentActiveMission = null;
-    document.getElementById('bridgeListView').style.display = 'block';
-    document.getElementById('bridgeDetailView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'none';
-}
-
-function showBridgeDetails(bridge) {
-    currentActiveBridge = bridge; currentActiveMission = null;
-    document.getElementById('bridgeListView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'none';
-    document.getElementById('bridgeDetailView').style.display = 'block';
-
-    // ADDED EDIT BUTTON HERE NEXT TO THE TITLE
-    document.getElementById('detailName').innerHTML = `${bridge.name} <button onclick="openBridgeModal(${bridge.db_id})" style="margin-left: 15px; font-size: 14px; cursor: pointer; border: none; background: #E2E8F0; padding: 5px 12px; border-radius: 6px; color: #0F172A;">✏️ Edit</button>`;
-    document.getElementById('detailLocation').innerText = bridge.location;
-    document.getElementById('detailId').innerText = bridge.id;
-
-    let bridgeHealth = 'Fair'; 
-    const imgs = bridge.images || [];
-    let latestImages = [];
-    let latestMissionIdLabel = 'Unknown';
-    
-    if (imgs.length > 0) {
-        const missions = {};
-        imgs.forEach(img => {
-            const mId = img.mission_id || 0;
-            if (!missions[mId]) missions[mId] = [];
-            missions[mId].push(img);
-        });
-
-        const latestMissionId = Math.max(...Object.keys(missions).map(Number));
-        latestImages = missions[latestMissionId];
-        latestMissionIdLabel = latestMissionId === 0 ? 'Unassigned' : latestMissionId;
-
-        for (let img of latestImages) {
-            let sev = img.severity || 'Fair';
-            let defType = (img.defect_type || img.type || '').toLowerCase();
-            let isMajor = defType.includes('crack') || defType.includes('rebar');
-
-            if (sev === 'Bad' || sev === 'Critical' || sev === 'High') {
-                if (isMajor) { bridgeHealth = 'Bad'; break; } 
-                else { if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor'; }
-            } else if (sev === 'Poor' || sev === 'Review Needed') {
-                if (bridgeHealth !== 'Bad') bridgeHealth = 'Poor';
-            }
-        }
-    }
-
-    const descElement = document.getElementById('latestMissionChartDesc');
-    if(descElement) descElement.innerText = imgs.length > 0 ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
-
-    const badge = document.getElementById('bridgeConditionBadge');
-    if (bridgeHealth === 'Bad') {
-        badge.className = 'status-badge status-bad';
-        badge.innerHTML = '🚨 Condition: BAD (Critical)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "CRITICAL CONDITION: Major structural anomalies detected.";
-    } else if (bridgeHealth === 'Poor') {
-        badge.className = 'status-badge status-poor';
-        badge.innerHTML = '⚠️ Condition: POOR (Monitor)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "MODERATE DETERIORATION: Continue monitoring required.";
-    } else {
-        badge.className = 'status-badge status-fair';
-        badge.innerHTML = '✅ Condition: FAIR (Safe)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
-    }
-
-    let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
-    latestImages.forEach(img => {
-        let severity = img.severity || 'Fair';
-        if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
-        else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
-        else severityCounts['Fair']++; 
-    });
-
-    let labels = [], chartData = [], colors = [];
-    for (const [sev, count] of Object.entries(severityCounts)) {
-        if(count > 0) {
-            labels.push(sev); chartData.push(count);
-            if (sev === 'Bad') colors.push('#ef4444');
-            else if (sev === 'Fair') colors.push('#10b981');
-            else colors.push('#f59e0b'); 
-        }
-    }
-
-    const ctx = document.getElementById('defectChart').getContext('2d');
-    if (detailChartInstance) detailChartInstance.destroy();
-    detailChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-    });
-
-    const groupedByMission = {};
-    imgs.forEach(img => {
-        const mId = img.mission_id || 'Unassigned';
-        if (!groupedByMission[mId]) groupedByMission[mId] = [];
-        groupedByMission[mId].push(img);
-    });
-
-    const missionGrid = document.getElementById('missionListGrid');
-    missionGrid.innerHTML = '';
-    if (Object.keys(groupedByMission).length === 0) {
-        missionGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No flight missions logged for this bridge yet.</p>';
-        return;
-    }
-
-    const sortedMissions = Object.keys(groupedByMission).sort((a,b) => b - a);
-    sortedMissions.forEach(mId => {
-        const mImgs = groupedByMission[mId];
-        const label = mId === 'Unassigned' ? 'Unassigned Captures' : `Mission #${mId}`;
-        const dateStr = mImgs[0] && (mImgs[0].date || mImgs[0].captured_at) ? new Date(mImgs[0].date || mImgs[0].captured_at).toLocaleDateString() : 'Recent';
-        const urgentCount = mImgs.filter(i => i.severity === 'Bad' || i.severity === 'Critical' || i.severity === 'High').length;
-        const urgentBadge = urgentCount > 0 ? `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>` : '';
-
-        const card = document.createElement('div');
-        card.className = 'mission-card';
-        card.onclick = () => showMissionDetails(mId);
-        card.innerHTML = `
-            <div><div class="mission-card-title">🚁 ${label}</div><div class="mission-card-subtitle">Flight Date: ${dateStr}</div>${urgentBadge}</div>
-            <div class="mission-card-stats">${mImgs.length} Images</div>
-        `;
-        missionGrid.appendChild(card);
-    });
-}
-
-function backToBridgeDetails() { if(currentActiveBridge) showBridgeDetails(currentActiveBridge); }
-
-function showMissionDetails(missionId) {
-    currentActiveMission = missionId;
-    document.getElementById('bridgeDetailView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'block';
-
-    const missionLabel = missionId === 'Unassigned' ? 'Unassigned Captures' : `Flight Mission #${missionId}`;
-    document.getElementById('missionDetailTitle').innerText = missionLabel;
-
-    const allImages = currentActiveBridge.images || [];
-    const missionImages = allImages.filter(img => String(img.mission_id || 'Unassigned') === String(missionId));
-    document.getElementById('missionDetailSubtitle').innerText = `${missionImages.length} Data points captured for ${currentActiveBridge.name}`;
-
-    let severityCounts = { 'Bad':0, 'Poor':0, 'Fair':0 };
-    missionImages.forEach(img => {
-        let s = img.severity || 'Fair';
-        if (s === 'Critical' || s === 'High' || s === 'Bad') severityCounts['Bad']++;
-        else if (s === 'Review Needed' || s === 'Poor') severityCounts['Poor']++;
-        else severityCounts['Fair']++; 
-    });
-
-    let labels = [], chartData = [], colors = [];
-    for (const [sev, count] of Object.entries(severityCounts)) {
-        if(count > 0) {
-            labels.push(sev); chartData.push(count);
-            if (sev === 'Bad') colors.push('#ef4444');
-            else if (sev === 'Fair') colors.push('#10b981');
-            else colors.push('#f59e0b');
-        }
-    }
-
-    const ctx = document.getElementById('missionDefectChart').getContext('2d');
-    if (missionChartInstance) missionChartInstance.destroy();
-    missionChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '50%' }
-    });
-
-    document.getElementById('filterType').value = 'all'; 
-    applyGalleryFilters();
-}
-
-function applyGalleryFilters() {
-    if (!currentActiveBridge || !currentActiveMission) return;
-    const allImages = currentActiveBridge.images || [];
-    const missionImages = allImages.filter(img => String(img.mission_id || 'Unassigned') === String(currentActiveMission));
-    const selectedType = document.getElementById('filterType').value.toLowerCase();
-    const filteredImages = missionImages.filter(img => {
-        const imgType = (img.defect_type || img.type || 'Unknown').toLowerCase();
-        return selectedType === 'all' || imgType.includes(selectedType);
-    });
-    renderImageGallery(filteredImages);
-}
-
-function renderImageGallery(images) {
-    const container = document.getElementById('galleryContainer');
-    container.innerHTML = '';
-    if (!images || images.length === 0) {
-        container.innerHTML = '<p class="text-muted" style="padding: 20px; background: #fff; border-radius: 8px;">No images match your current filter.</p>';
-        return;
-    }
-
-    const groupedBySpan = {};
-    images.forEach(img => {
-        const span = img.span_target || img.span || 'Unknown Span';
-        if (!groupedBySpan[span]) groupedBySpan[span] = [];
-        groupedBySpan[span].push(img);
-    });
-
-    const sortedSpans = Object.keys(groupedBySpan).sort((a, b) => parseInt(a.replace(/[^\d]/g, '')) - parseInt(b.replace(/[^\d]/g, '')));
-
-    sortedSpans.forEach(span => {
-        const spanImages = groupedBySpan[span];
-        const spanGroup = document.createElement('div');
-        spanGroup.className = 'span-group';
-        spanGroup.innerHTML = `<h4 class="span-group-title">📍 ${span} <span class="badge badge-online" style="margin-left:10px; background:#e2e8f0; color:#475569;">${spanImages.length} Photos</span></h4>`;
-        const grid = document.createElement('div');
-        grid.className = 'image-gallery-grid';
-
-        spanImages.forEach(img => {
-            const rawUrl = img.image_url || img.url || '';
-            const imgSrc = rawUrl.startsWith('http') ? rawUrl : 'https://via.placeholder.com/300x200?text=No+Image+Available';
-            const defectType = img.defect_type || img.type || 'Unknown Defect';
-            let defectSeverity = img.severity || 'Fair';
-            if (defectSeverity === 'Critical' || defectSeverity === 'High') defectSeverity = 'Bad';
-            if (defectSeverity === 'Review Needed') defectSeverity = 'Poor';
-            const dateStr = img.date || img.created_at || img.captured_at ? new Date(img.date || img.created_at || img.captured_at).toLocaleString() : 'Recent Capture';
-            
-            const card = document.createElement('div');
-            card.className = 'gallery-card';
-            card.innerHTML = `
-                <img src="${imgSrc}" class="gallery-img" alt="Defect">
-                <div class="gallery-info">
-                    <p style="font-size: 14px; margin-bottom: 6px;"><strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${defectType}</strong></p>
-                    <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
-                    <div class="crud-controls">
-                        <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${img.id || img.defect_id}, this)">
-                            <option value="Bad" ${defectSeverity === 'Bad' ? 'selected' : ''}>Bad</option>
-                            <option value="Poor" ${defectSeverity === 'Poor' ? 'selected' : ''}>Poor</option>
-                            <option value="Fair" ${defectSeverity === 'Fair' ? 'selected' : ''}>Fair</option>
-                        </select>
-                        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${img.id || img.defect_id})">🗑️ Delete</button>
-                    </div>
+        if (data.status === 'success' && data.captures.length > 0) {
+            const gallery = document.getElementById('liveCaptureGallery');
+            gallery.innerHTML = data.captures.map(c => `
+                <div class="live-capture-card">
+                    <span class="badge ${c.severity.toLowerCase()}" style="font-size: 10px; padding: 2px 4px; top: 5px; right: 5px;">${c.severity}</span>
+                    <img src="${c.image_url}" alt="Defect">
+                    <div class="live-capture-info">${c.defect_type}</div>
                 </div>
-            `;
-            grid.appendChild(card);
-        });
-        spanGroup.appendChild(grid);
-        container.appendChild(spanGroup);
-    });
-}
-
-// ==========================================
-// LIVE FLIGHT GCS LOGIC
-// ==========================================
-function populateFlightDropdown() {
-    const select = document.getElementById('flightBridgeSelect');
-    select.innerHTML = '';
-    liveBridgeData.forEach(bridge => {
-        const option = document.createElement('option');
-        option.value = bridge.db_id;
-        option.text = `${bridge.id} - ${bridge.name}`;
-        select.appendChild(option);
-    });
-}
-
-function logToTerminal(msg, color="#38BDF8") {
-    const terminal = document.getElementById('flightLogTerminal');
-    const time = new Date().toLocaleTimeString();
-    terminal.innerHTML += `<span style="color:${color}">[${time}] ${msg}</span><br>`;
-    terminal.scrollTop = terminal.scrollHeight;
+            `).join('');
+        }
+    } catch(e) {
+        console.error("Capture sync error:", e);
+    }
 }
 
 async function toggleFlightMission() {
     const btn = document.getElementById('toggleMissionBtn');
     const bridgeSelect = document.getElementById('flightBridgeSelect');
     const spanInput = document.getElementById('flightSpanInput');
-
+    
     if (!isFlightActive) {
         const bridgeId = parseInt(bridgeSelect.value);
-        if(isNaN(bridgeId)) return alert("Please wait for bridges to load.");
+        if(isNaN(bridgeId)) return alert("Please select a target bridge first!");
 
         try {
             const res = await fetch('/api/mission/start', {
@@ -504,12 +88,16 @@ async function toggleFlightMission() {
             
             if(data.status === "success") {
                 isFlightActive = true;
+                currentActiveMission = data.mission_id;
                 bridgeSelect.disabled = true;
-                spanInput.disabled = true;
+                
                 btn.innerHTML = '🛑 END MISSION';
                 btn.style.background = '#EF4444';
                 logToTerminal(`> MISSION #${data.mission_id} INITIATED. AI ARMED.`, '#22C55E');
-                logToTerminal(`> Live cloud syncing activated.`, '#FACC15');
+                
+                // Start pulling images for the gallery every 3 seconds
+                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted">Scanning...</p>';
+                liveCaptureInterval = setInterval(fetchLiveCaptures, 3000);
             }
         } catch (e) {
             logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444');
@@ -518,11 +106,14 @@ async function toggleFlightMission() {
         try {
             await fetch('/api/mission/stop', { method: 'POST' });
             isFlightActive = false;
+            currentActiveMission = null;
             bridgeSelect.disabled = false;
-            spanInput.disabled = false;
+            
             btn.innerHTML = '▶ START MISSION & AI';
             btn.style.background = '#10B981';
             logToTerminal(`> MISSION CONCLUDED. AI Disarmed.`, '#F59E0B');
+            
+            clearInterval(liveCaptureInterval);
             fetchDatabaseStats(); 
         } catch (e) {
             logToTerminal(`> ERROR stopping mission: ${e}`, '#EF4444');
@@ -530,9 +121,36 @@ async function toggleFlightMission() {
     }
 }
 
-// ==========================================
-// ADD / EDIT BRIDGE CRUD LOGIC
-// ==========================================
+// --- DATABASE & CRUD LOGIC ---
+async function fetchDatabaseStats() {
+    try {
+        const response = await fetch('/api/bridge-data');
+        const data = await response.json();
+
+        if (data.status === "success") {
+            liveBridgeData = data.bridges;
+            document.getElementById('g-total-bridges').innerText = data.stats.total_bridges;
+            document.getElementById('g-total-defects').innerText = data.stats.total_defects;
+
+            renderGlobalChart(data.stats.severity);
+            populateBridgeDropdowns(data.bridges);
+            renderBridges(data.bridges);
+        }
+    } catch (error) {
+        console.error("Error fetching data:", error);
+    }
+}
+
+function populateBridgeDropdowns(bridges) {
+    const flightSelect = document.getElementById('flightBridgeSelect');
+    if (flightSelect) {
+        flightSelect.innerHTML = '<option value="" disabled selected>-- Select Target Bridge --</option>';
+        bridges.forEach(b => {
+            flightSelect.innerHTML += `<option value="${b.db_id}">${b.name} (${b.id})</option>`;
+        });
+    }
+}
+
 function openBridgeModal(db_id = null) {
     const modal = document.getElementById('bridgeModal');
     const title = document.getElementById('bridgeModalTitle');
@@ -542,7 +160,7 @@ function openBridgeModal(db_id = null) {
         const bridge = liveBridgeData.find(b => b.db_id === db_id);
         
         document.getElementById('modalBridgeId').value = bridge.db_id;
-        document.getElementById('modalBridgeCode').value = bridge.id;
+        document.getElementById('modalBridgeCode').value = bridge.id; 
         document.getElementById('modalBridgeName').value = bridge.name;
         document.getElementById('modalBridgeLocation').value = bridge.location;
         document.getElementById('modalBridgeRemarks').value = bridge.remarks || '';
@@ -554,7 +172,6 @@ function openBridgeModal(db_id = null) {
         document.getElementById('modalBridgeLocation').value = '';
         document.getElementById('modalBridgeRemarks').value = '';
     }
-    
     modal.style.display = 'flex';
 }
 
@@ -564,7 +181,6 @@ function closeBridgeModal() {
 
 async function saveBridge() {
     const db_id = document.getElementById('modalBridgeId').value;
-    
     const payload = {
         bridge_code: document.getElementById('modalBridgeCode').value,
         name: document.getElementById('modalBridgeName').value,
@@ -587,11 +203,171 @@ async function saveBridge() {
         
         if (data.status === 'success') {
             closeBridgeModal();
-            fetchDatabaseStats(); // Seamlessly fetch the new bridge
-        } else {
-            alert('Database update failed.');
-        }
-    } catch (error) {
-        console.error("Network Error:", error);
+            fetchDatabaseStats(); 
+        } else alert('Database update failed.');
+    } catch (error) { console.error("Network Error:", error); }
+}
+
+async function updateSeverity(defectId, newSeverity) {
+    await fetch(`/api/defects/${defectId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ severity: newSeverity })
+    });
+    fetchDatabaseStats();
+}
+
+async function deleteDefect(defectId) {
+    if(confirm("Permanently delete this defect record?")) {
+        await fetch(`/api/defects/${defectId}`, { method: 'DELETE' });
+        fetchDatabaseStats();
     }
+}
+
+async function updateRemarks(bridgeId) {
+    const btn = event.target;
+    const textArea = btn.previousElementSibling;
+    const newRemarks = textArea.value;
+    
+    btn.innerHTML = "Saving...";
+    await fetch(`/api/bridges/${bridgeId}/remarks`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remarks: newRemarks })
+    });
+    btn.innerHTML = "Save Remarks";
+    btn.style.background = "#10B981";
+    setTimeout(() => { btn.style.background = "#007bff"; }, 2000);
+}
+
+function renderGlobalChart(severityData) {
+    const ctx = document.getElementById('globalConditionChart').getContext('2d');
+    if (globalChartInstance) globalChartInstance.destroy();
+
+    const counts = { "Fair": 0, "Poor": 0, "Bad": 0 };
+    severityData.forEach(item => { counts[item[0]] = item[1]; });
+
+    globalChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Fair (Monitor)', 'Poor (Repair)', 'Bad (Critical)'],
+            datasets: [{ data: [counts['Fair'], counts['Poor'], counts['Bad']], backgroundColor: ['#10B981', '#F59E0B', '#EF4444'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+}
+
+function calculateBridgeStatus(defects) {
+    if (!defects || defects.length === 0) return { label: 'FAIR', class: 'status-fair' };
+    const counts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
+    defects.forEach(d => counts[d[0]] = d[1]);
+    
+    if (counts['Bad'] > 0) return { label: 'CRITICAL', class: 'status-bad' };
+    if (counts['Poor'] > 0) return { label: 'NEEDS REPAIR', class: 'status-poor' };
+    return { label: 'FAIR', class: 'status-fair' };
+}
+
+function renderBridges(bridges) {
+    const container = document.getElementById('bridgeContainer');
+    container.innerHTML = '';
+
+    bridges.forEach(bridge => {
+        const spans = [...new Set(bridge.images.map(img => img.span))];
+        const status = calculateBridgeStatus(bridge.defects);
+        
+        let spanOptions = `<option value="ALL">All Spans</option>`;
+        spans.forEach(s => spanOptions += `<option value="${s}">${s}</option>`);
+
+        let html = `
+            <div class="bridge-card">
+                <div class="bridge-header">
+                    <div>
+                        <h3 class="bridge-title">${bridge.name} <span class="bridge-id">${bridge.id}</span>
+                        <button onclick="openBridgeModal(${bridge.db_id})" style="margin-left: 15px; font-size: 12px; cursor: pointer; border:none; background:none; color:#2563EB;">✏️ Edit</button></h3>
+                        <p class="text-muted">📍 ${bridge.location}</p>
+                    </div>
+                    <div>
+                        <select class="filter-select" onchange="filterGallery(${bridge.db_id}, this.value)">
+                            ${spanOptions}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="bridge-overview-row">
+                    <div class="chart-section">
+                        <canvas id="chart-${bridge.db_id}" height="180"></canvas>
+                    </div>
+                    <div class="remarks-section">
+                        <div class="status-badge ${status.class}">STATUS: ${status.label}</div>
+                        <h4 style="font-size: 13px; color: #64748B; margin-bottom: 5px;">Engineering Remarks</h4>
+                        <textarea class="form-control" rows="4">${bridge.remarks || ''}</textarea>
+                        <button class="btn btn-primary" onclick="updateRemarks(${bridge.db_id})">Save Remarks</button>
+                    </div>
+                </div>
+
+                <div id="gallery-${bridge.db_id}" style="margin-top: 30px;">
+                    ${renderGalleryBySpan(bridge.images, 'ALL')}
+                </div>
+            </div>
+        `;
+        container.innerHTML += html;
+    });
+
+    bridges.forEach(bridge => {
+        const ctx = document.getElementById(`chart-${bridge.db_id}`).getContext('2d');
+        const counts = { "Fair": 0, "Poor": 0, "Bad": 0 };
+        bridge.defects.forEach(item => { counts[item[0]] = item[1]; });
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Fair', 'Poor', 'Bad'],
+                datasets: [{ label: 'Defect Count', data: [counts['Fair'], counts['Poor'], counts['Bad']], backgroundColor: ['#10B981', '#F59E0B', '#EF4444'] }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }, plugins: { legend: { display: false } } }
+        });
+    });
+}
+
+function filterGallery(bridgeDbId, spanTarget) {
+    const bridge = liveBridgeData.find(b => b.db_id === bridgeDbId);
+    const galleryDiv = document.getElementById(`gallery-${bridgeDbId}`);
+    galleryDiv.innerHTML = renderGalleryBySpan(bridge.images, spanTarget);
+}
+
+function renderGalleryBySpan(images, filterSpan) {
+    let filteredImages = filterSpan === 'ALL' ? images : images.filter(img => img.span === filterSpan);
+    if (filteredImages.length === 0) return `<p class="text-muted">No images recorded for this zone.</p>`;
+
+    const groupedBySpan = {};
+    filteredImages.forEach(img => {
+        if (!groupedBySpan[img.span]) groupedBySpan[img.span] = [];
+        groupedBySpan[img.span].push(img);
+    });
+
+    let html = '';
+    for (const [span, imgs] of Object.entries(groupedBySpan)) {
+        html += `
+            <div class="span-group">
+                <h4 class="span-group-title">🏷️ ${span}</h4>
+                <div class="image-gallery">
+                    ${imgs.map(img => `
+                        <div class="image-card">
+                            <span class="badge ${img.severity.toLowerCase()}">${img.severity}</span>
+                            <a href="${img.url}" target="_blank"><img src="${img.url}" alt="Defect"></a>
+                            <div class="image-info">
+                                <p style="font-weight: bold; color: #1e293b; font-size: 14px; margin-bottom: 5px;">${img.type}</p>
+                                <p class="text-muted" style="font-size: 11px; margin-bottom: 10px;">🕒 ${new Date(img.date).toLocaleString()}</p>
+                                <select class="severity-select" onchange="updateSeverity(${img.id}, this.value)">
+                                    <option value="Fair" ${img.severity === 'Fair' ? 'selected' : ''}>Fair</option>
+                                    <option value="Poor" ${img.severity === 'Poor' ? 'selected' : ''}>Poor</option>
+                                    <option value="Bad" ${img.severity === 'Bad' ? 'selected' : ''}>Bad</option>
+                                </select>
+                                <button class="delete-btn" onclick="deleteDefect(${img.id})">🗑️ Delete Record</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    return html;
 }
