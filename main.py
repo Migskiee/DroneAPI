@@ -56,6 +56,9 @@ class BridgeCreateUpdate(BaseModel):
     remarks: str
     span_count: int
 
+class SpanUpdateParams(BaseModel):
+    span_target: str
+
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
@@ -299,6 +302,15 @@ def get_live_frames(mission_id: int):
         return {"status": "success", "frames": frames}
     except Exception as e: return {"status": "error"}
 
+@app.put("/api/mission/span")
+def update_mission_span(params: SpanUpdateParams):
+    with state_lock:
+        if flight_state["is_active"]:
+            # Dynamically change the span tag for all future photos taken in this mission
+            flight_state["span_target"] = params.span_target
+            return {"status": "success", "span_target": params.span_target}
+        else:
+            raise HTTPException(status_code=400, detail="No active mission")
 # ==========================================
 # DATABASE CRUD ENDPOINTS 
 # ==========================================

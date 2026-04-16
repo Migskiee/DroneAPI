@@ -562,12 +562,29 @@ function logToTerminal(msg, color="#38BDF8") {
     terminal.scrollTop = terminal.scrollHeight;
 }
 
-function setFlightSpan(span, btnElement) {
-    if(isFlightActive) return alert("Cannot change span while mission is active!");
+async function setFlightSpan(span, btnElement) {
+    // Update the UI buttons
     document.getElementById('flightSpanInput').value = span;
     document.querySelectorAll('.span-btn').forEach(b => b.classList.remove('active'));
     btnElement.classList.add('active');
-    logToTerminal(`> Target Zone set to: ${span}`, '#38BDF8');
+    
+    // If a mission is currently running, dynamically update the cloud server!
+    if(isFlightActive) {
+        try {
+            const res = await fetch('/api/mission/span', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ span_target: span })
+            });
+            if(res.ok) {
+                logToTerminal(`> Flight Zone dynamically shifted to: ${span}`, '#22C55E');
+            }
+        } catch(e) {
+            console.error("Failed to update span mid-flight:", e);
+        }
+    } else {
+        logToTerminal(`> Target Zone set to: ${span}`, '#38BDF8');
+    }
 }
 
 async function fetchLiveCaptures() {
