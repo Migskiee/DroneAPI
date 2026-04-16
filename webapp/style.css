@@ -60,25 +60,27 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .summary-card h4 { font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 .summary-value { font-size: 36px; font-weight: bold; color: #0f172a; }
 
-/* FIXED: Scrollable Mission Grid */
-.mission-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; max-height: 400px; overflow-y: auto; padding-right: 10px;}
+/* STRICT LOCK: Mission Grid */
+.mission-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; height: 350px; max-height: 350px; overflow-y: auto; padding-right: 10px; align-content: flex-start;}
 .mission-card { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; cursor: pointer; transition: all 0.2s ease; display: flex; justify-content: space-between; align-items: center; }
 .mission-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-color: #3b82f6; background: #ffffff; }
 .mission-card-title { font-size: 18px; color: #0f172a; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;}
 .mission-card-subtitle { font-size: 13px; color: #64748b; }
 .mission-card-stats { background: #eef2ff; color: #4f46e5; padding: 8px 15px; border-radius: 8px; font-weight: bold; font-size: 14px; text-align: center; }
 
-/* FIXED: Historical Database Image Gallery (Locked to 4 Columns) */
+/* STRICT LOCK: Historical Database Image Gallery */
 .image-gallery-grid { 
     display: grid; 
-    grid-template-columns: repeat(4, 1fr); /* Forces exactly 4 items per row */
+    grid-template-columns: repeat(4, 1fr); 
     gap: 15px; 
     margin-top: 15px; 
-    max-height: 480px; /* Locks height to roughly 1.5 rows to encourage scrolling */
+    height: 480px; 
+    max-height: 480px;
     overflow-y: auto; 
     overflow-x: hidden;
     padding-right: 10px; 
     width: 100%;
+    align-content: flex-start; /* Stops rows from stretching vertically */
 }
 .gallery-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: transform 0.2s; cursor: pointer; }
 .gallery-card:hover { transform: translateY(-2px); box-shadow: 0 8px 12px -3px rgba(0,0,0,0.1); border-color:#3b82f6; }
@@ -117,25 +119,30 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .span-btn:hover { background: #e2e8f0; }
 .span-btn.active { background: #2563EB; color: white; border-color: #1d4ed8; }
 
-/* FIXED: Locked Layout for Live Captures (Forces Exactly 4 Visible Items) */
+/* STRICT LOCK: Live Captures (Wraps by Column) */
 .recent-captures-panel { 
     background: white; padding: 15px 20px; border-radius: 8px; border: 1px solid #e2e8f0; 
-    height: 220px; display: flex; flex-direction: column; width: 100%; max-width: 100%; overflow: hidden;
+    height: 250px; min-height: 250px; max-height: 250px; /* Absolute lock */
+    display: flex; flex-direction: column; width: 100%; overflow: hidden;
 }
 .live-gallery { 
-    display: flex; gap: 15px; overflow-x: auto; overflow-y: hidden; 
-    padding-bottom: 10px; height: 100%; align-items: center; scroll-behavior: smooth; width: 100%;
+    display: flex; 
+    flex-direction: column; /* Force wrap by column */
+    flex-wrap: wrap; /* Wrap to next column when full */
+    gap: 15px; 
+    overflow-x: auto; 
+    overflow-y: hidden; 
+    padding-bottom: 10px; height: 100%; align-content: flex-start; scroll-behavior: smooth;
 }
 .live-capture-card { 
-    /* MATH FIX: 25% minus the gap guarantees exactly 4 items fit without stretching the browser */
-    flex: 0 0 calc(25% - 11.25px); 
-    min-width: 120px; 
-    height: 130px; background: #f8fafc; border: 1px solid #e2e8f0; 
+    width: 140px; height: 120px; /* Fixed size */
+    background: #f8fafc; border: 1px solid #e2e8f0; 
     border-radius: 6px; overflow: hidden; position: relative; 
     cursor: pointer; transition: transform 0.2s; display: flex; flex-direction: column;
+    flex-shrink: 0; /* Stop squishing */
 }
-.live-capture-card:hover { transform: translateY(-3px); border-color: #3b82f6; z-index: 10;}
-.live-capture-card img { width: 100%; height: 90px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0; }
+.live-capture-card:hover { transform: scale(1.05); border-color: #3b82f6; z-index: 10;}
+.live-capture-card img { width: 100%; height: 85px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0; }
 .live-capture-info { padding: 6px; font-size: 11px; font-weight: bold; text-align: center; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
 
 /* Image Preview Modal (Lightbox) */
@@ -164,10 +171,5 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
     display: flex; justify-content: center; align-items: center;
     z-index: 10; color: #ef4444; text-align: center;
 }
-.offline-content h2 { 
-    font-size: 32px; font-weight: bold; letter-spacing: 3px; 
-    margin-bottom: 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-}
-.offline-content p { 
-    color: #94a3b8; font-size: 15px; font-weight: bold;
-}
+.offline-content h2 { font-size: 32px; font-weight: bold; letter-spacing: 3px; margin-bottom: 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.offline-content p { color: #94a3b8; font-size: 15px; font-weight: bold; }
