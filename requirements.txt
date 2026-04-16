@@ -9,4 +9,4 @@ cloudinary
 psycopg2-binary
 pydantic
 websockets
-ultralytics
+ultralytics==8.2.28
