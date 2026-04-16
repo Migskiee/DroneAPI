@@ -156,7 +156,7 @@ def analyze_mission_worker(mission_id):
                 
                 if frame is not None and model is not None:
                     # Run YOLO Inference 
-                    results = model.track(frame, conf=0.2, imgsz=640, persist=True, tracker="bytetrack.yaml", verbose=False)
+                    results = model.predict(frame, conf=0.2, imgsz=640, verbose=False)
                     boxes = results[0].boxes
                     
                     if boxes is not None and len(boxes) > 0:
