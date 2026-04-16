@@ -402,11 +402,9 @@ function showMissionDetails(missionId) {
     const missionLabel = `Flight Mission #${missionId}`;
     document.getElementById('missionDetailTitle').innerText = missionLabel;
 
-    // Check mission status
     const targetMission = currentActiveBridge.missions.find(m => m.id === missionId);
     const missionStatus = targetMission ? targetMission.status : 'Unknown';
 
-    // Show/Hide AI Action Banner based on status
     const actionContainer = document.getElementById('missionActionContainer');
     const chartContainer = document.getElementById('defectChartContainer');
     
@@ -430,7 +428,7 @@ function showMissionDetails(missionId) {
     let severityCounts = { 'Bad':0, 'Poor':0, 'Fair':0 };
     missionImages.forEach(img => {
         let s = img.severity || 'Fair';
-        if (s === 'Pending') return; // Skip pending images from the chart
+        if (s === 'Pending') return; 
         if (s === 'Critical' || s === 'High' || s === 'Bad') severityCounts['Bad']++;
         else if (s === 'Review Needed' || s === 'Poor') severityCounts['Poor']++;
         else severityCounts['Fair']++; 
@@ -458,7 +456,6 @@ function showMissionDetails(missionId) {
     applyGalleryFilters();
 }
 
-// --- NEW: TRIGGER MANUAL AI POST-PROCESSING ---
 async function startAiAnalysis() {
     if (!currentActiveMission) return;
     
@@ -483,7 +480,6 @@ async function startAiAnalysis() {
             body: JSON.stringify({ mission_id: currentActiveMission })
         });
         
-        // Poll for progress
         const pollInterval = setInterval(async () => {
             const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
             const statusData = await statusRes.json();
@@ -501,7 +497,6 @@ async function startAiAnalysis() {
                 btn.style.background = '#10b981';
                 progressText.innerText = 'Database updated successfully!';
                 
-                // Refresh database and reload the view to show the final defects
                 setTimeout(() => { fetchDatabaseStats(); }, 1500);
             }
         }, 1000); 
@@ -513,30 +508,61 @@ async function startAiAnalysis() {
     }
 }
 
-
 function applyGalleryFilters() {
     if (!currentActiveBridge || !currentActiveMission) return;
     const allImages = currentActiveBridge.images || [];
     const missionImages = allImages.filter(img => String(img.mission_id) === String(currentActiveMission));
     const selectedType = document.getElementById('filterType').value.toLowerCase();
+    
     const filteredImages = missionImages.filter(img => {
         const imgType = (img.defect_type || img.type || 'Unknown').toLowerCase();
         return selectedType === 'all' || imgType.includes(selectedType);
     });
+    
     renderImageGallery(filteredImages);
 }
 
+// --- NEW: SPLIT GALLERY RENDERER ---
 function renderImageGallery(images) {
-    const container = document.getElementById('galleryContainer');
-    container.innerHTML = '';
+    const containerDefects = document.getElementById('galleryContainerDefects');
+    const containerRaw = document.getElementById('galleryContainerRaw');
+    containerDefects.innerHTML = '';
+    containerRaw.innerHTML = '';
     
     if (!images || images.length === 0) {
-        container.innerHTML = '<p class="text-muted" style="padding: 20px; background: #fff; border-radius: 8px;">✅ Analysis Complete. No defects were found in this mission.</p>';
+        containerDefects.innerHTML = '<p class="text-muted" style="padding: 15px; background: #fff; border-radius: 8px;">No images found.</p>';
+        containerRaw.innerHTML = '<p class="text-muted" style="padding: 15px; background: #fff; border-radius: 8px;">No images found.</p>';
         return;
     }
 
+    // Separate the images based on the AI's findings
+    const defectImages = images.filter(img => {
+        const t = (img.defect_type || img.type || '');
+        return t !== 'Raw Image' && t !== 'Unknown Defect';
+    });
+    
+    const rawImages = images.filter(img => {
+        const t = (img.defect_type || img.type || '');
+        return t === 'Raw Image' || t === 'Unknown Defect';
+    });
+
+    if (defectImages.length === 0) {
+        containerDefects.innerHTML = '<p class="text-muted" style="padding: 15px; background: #f8fafc; border-radius: 8px;">No structural defects detected.</p>';
+    } else {
+        buildGalleryGrid(defectImages, containerDefects);
+    }
+
+    if (rawImages.length === 0) {
+        containerRaw.innerHTML = '<p class="text-muted" style="padding: 15px; background: #f8fafc; border-radius: 8px;">No raw images available.</p>';
+    } else {
+        buildGalleryGrid(rawImages, containerRaw);
+    }
+}
+
+// --- HELPER TO BUILD THE GRIDS ---
+function buildGalleryGrid(imageArray, container) {
     const groupedBySpan = {};
-    images.forEach(img => {
+    imageArray.forEach(img => {
         const span = img.span_target || img.span || 'Unknown Span';
         if (!groupedBySpan[span]) groupedBySpan[span] = [];
         groupedBySpan[span].push(img);
@@ -548,9 +574,12 @@ function renderImageGallery(images) {
         const spanImages = groupedBySpan[span];
         const spanGroup = document.createElement('div');
         spanGroup.className = 'span-group';
-        spanGroup.innerHTML = `<h4 class="span-group-title">📍 ${span} <span class="badge badge-online" style="margin-left:10px; background:#e2e8f0; color:#475569;">${spanImages.length} Photos</span></h4>`;
+        spanGroup.style.marginBottom = '20px';
+        spanGroup.innerHTML = `<h5 style="font-size: 16px; color: #1e293b; margin-bottom: 12px;">📍 ${span} <span class="badge badge-online" style="margin-left:10px; background:#e2e8f0; color:#475569;">${spanImages.length} Photos</span></h5>`;
+        
         const grid = document.createElement('div');
         grid.className = 'image-gallery-grid';
+        grid.style.maxHeight = '350px'; // Shrunk slightly so both grids fit beautifully
 
         spanImages.forEach(img => {
             const rawUrl = img.image_url || img.url || '';
@@ -558,16 +587,24 @@ function renderImageGallery(images) {
             const defectType = img.defect_type || img.type || 'Unknown Defect';
             let defectSeverity = img.severity || 'Fair';
             
-            // Adjust styles for 'Pending' raw images
-            let badgeClass = '';
             let crudHtml = '';
+            let topBadge = '';
+            let typeHtml = `<strong style="color: #dc2626;">🚨 Type:</strong> <strong>${defectType}</strong>`;
             
             if (defectSeverity === 'Pending') {
-                badgeClass = 'badge-pending';
+                topBadge = `<span class="health-badge badge-pending" style="position: absolute; top: 8px; right: 8px;">AWAITING AI</span>`;
                 crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">☁️ Stored in Cloud</p>`;
+                typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#64748b;">Raw Surface</strong>`;
+            } else if (defectType === 'Raw Image') {
+                topBadge = `<span class="health-badge badge-fair" style="position: absolute; top: 8px; right: 8px;">SAFE</span>`;
+                crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">✅ Verified Safe</p>`;
+                typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#64748b;">Structure Surface</strong>`;
             } else {
                 if (defectSeverity === 'Critical' || defectSeverity === 'High') defectSeverity = 'Bad';
                 if (defectSeverity === 'Review Needed') defectSeverity = 'Poor';
+                
+                let badgeColorClass = defectSeverity === 'Bad' ? 'badge-bad' : (defectSeverity === 'Poor' ? 'badge-poor' : 'badge-fair');
+                topBadge = `<span class="health-badge ${badgeColorClass}" style="position: absolute; top: 8px; right: 8px;">${defectSeverity.toUpperCase()}</span>`;
                 
                 crudHtml = `
                     <div class="crud-controls">
@@ -586,12 +623,12 @@ function renderImageGallery(images) {
             card.className = 'gallery-card';
             card.innerHTML = `
                 <div style="position: relative;">
-                    ${defectSeverity === 'Pending' ? `<span class="health-badge badge-pending" style="position: absolute; top: 8px; right: 8px;">RAW IMAGE</span>` : ''}
-                    <img src="${imgSrc}" class="gallery-img" alt="Defect" onclick="openImagePreview('${imgSrc}')">
+                    ${topBadge}
+                    <img src="${imgSrc}" class="gallery-img" alt="Capture" onclick="openImagePreview('${imgSrc}')">
                 </div>
                 <div class="gallery-info">
-                    <p style="font-size: 14px; margin-bottom: 6px;"><strong style="color: #dc2626;">🚨 Type:</strong> <strong>${defectType}</strong></p>
-                    <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
+                    <p style="font-size: 14px; margin-bottom: 6px;">${typeHtml}</p>
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 ${dateStr}</p>
                     ${crudHtml}
                 </div>
             `;
@@ -602,7 +639,6 @@ function renderImageGallery(images) {
     });
 }
 
-// --- STREAM CONNECTION LOGIC ---
 document.addEventListener('DOMContentLoaded', () => {
     const streamImg = document.getElementById('liveVideoStream');
     const offlineOverlay = document.getElementById('offlineOverlay');

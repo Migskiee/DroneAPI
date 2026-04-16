@@ -155,7 +155,7 @@ def analyze_mission_worker(mission_id):
                 has_new_defect = False
                 
                 if frame is not None and model is not None:
-                    # Run YOLO Inference (Using a lower confidence of 0.2 for testing!)
+                    # Run YOLO Inference 
                     results = model.track(frame, conf=0.2, imgsz=640, persist=True, tracker="bytetrack.yaml", verbose=False)
                     boxes = results[0].boxes
                     
@@ -193,8 +193,9 @@ def analyze_mission_worker(mission_id):
                             if os.path.exists(tmp_path): os.remove(tmp_path)
                             
                 if not has_new_defect:
-                    # 4. No Defect Found! Delete the row from the database to keep it clean.
-                    cursor.execute("DELETE FROM captured_images WHERE id = %s", (img_id,))
+                    # 4. No Defect Found! Keep the raw image in the database. 
+                    # Change severity from 'Pending' to 'Fair' so it is officially marked as analyzed and safe.
+                    cursor.execute("UPDATE captured_images SET severity_level = 'Fair' WHERE id = %s", (img_id,))
                     conn.commit()
                     
             except Exception as e:
@@ -307,7 +308,6 @@ def update_mission_span(params: SpanUpdateParams):
             return {"status": "success"}
         else: raise HTTPException(status_code=400)
 
-# NEW: Trigger the AI manually from the database screen
 @app.post("/api/mission/analyze")
 def trigger_ai_analysis(params: AnalyzeParams):
     try:
@@ -457,4 +457,4 @@ app.mount("/", StaticFiles(directory=web_path, html=True), name="web")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port) 
+    uvicorn.run(app, host="0.0.0.0", port=port)
