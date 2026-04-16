@@ -491,9 +491,9 @@ function renderImageGallery(images) {
             
             const card = document.createElement('div');
             card.className = 'gallery-card';
-            // Click to Preview
+            // Added explicit onclick event for lightbox popup
             card.innerHTML = `
-                <img src="${imgSrc}" class="gallery-img" alt="Defect" onclick="openImagePreview('${imgSrc}')" style="cursor: pointer;">
+                <img src="${imgSrc}" class="gallery-img" alt="Defect" onclick="openImagePreview('${imgSrc}')">
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;"><strong style="color: #dc2626;">🚨 Defect:</strong> <strong>${defectType}</strong></p>
                     <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 Captured: ${dateStr}</p>
@@ -520,14 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const offlineOverlay = document.getElementById('offlineOverlay');
 
     if (streamImg) {
-        // If the stream breaks or server disconnects, show OFFLINE
         streamImg.onerror = function() {
             this.style.display = 'none';
             offlineOverlay.style.display = 'flex';
             logToTerminal(`> WARNING: Video stream connection lost.`, '#EF4444');
         };
-        
-        // If the stream reconnects, hide OFFLINE
         streamImg.onload = function() {
             this.style.display = 'block';
             offlineOverlay.style.display = 'none';
@@ -535,16 +532,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Function attached to the "Retry Connection" button
 window.retryStream = function() {
     const streamImg = document.getElementById('liveVideoStream');
     const offlineOverlay = document.getElementById('offlineOverlay');
-    
     logToTerminal(`> Attempting to re-establish video link...`, '#FACC15');
     offlineOverlay.style.display = 'none'; 
     streamImg.style.display = 'block';
-    
-    // Force the browser to bypass cache and try loading the stream again
     streamImg.src = "/video_feed?t=" + new Date().getTime();
 };
 
@@ -586,7 +579,7 @@ async function fetchLiveCaptures() {
             const res = await fetch(`/api/mission/${currentActiveMission}/live_frames`);
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
-                // Ensure latest frames are shown and clickable!
+                // Ensure latest frames are shown and clickable for lightbox!
                 gallery.innerHTML = data.frames.map(f => `
                     <div class="live-capture-card" onclick="openImagePreview('${f.url}')">
                         <span class="health-badge badge-fair" style="position: absolute; top: 5px; right: 5px;">Raw Frame</span>
@@ -595,8 +588,7 @@ async function fetchLiveCaptures() {
                     </div>
                 `).join('');
                 
-                // Auto-scroll gallery to right to see newest images
-                gallery.scrollLeft = gallery.scrollWidth;
+                gallery.scrollTop = gallery.scrollHeight; // Scroll down if wrapped
             }
         } else {
             const res = await fetch(`/api/mission/${currentActiveMission}/captures`);
@@ -627,7 +619,6 @@ async function toggleFlightMission() {
     const progressText = document.getElementById('aiProgressText');
 
     if (!isFlightActive) {
-        // --- START MISSION ---
         const bridgeId = parseInt(bridgeSelect.value);
         if(isNaN(bridgeId)) return alert("Please select a target bridge from the dropdown.");
         if(!spanInput.value) return alert("Please select a target span.");
@@ -650,12 +641,11 @@ async function toggleFlightMission() {
                 logToTerminal(`> MISSION #${data.mission_id} INITIATED. Auto-Capture ARMED.`, '#22C55E');
                 logToTerminal(`> Capturing HD raw photos via secondary pipeline...`, '#FACC15');
 
-                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first raw frame...</p>';
+                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first high-res frame from drone...</p>';
                 liveCaptureInterval = setInterval(fetchLiveCaptures, 2000);
             }
         } catch (e) { logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444'); }
     } else {
-        // --- STOP MISSION & RUN BATCH PROCESSOR ---
         clearInterval(liveCaptureInterval);
         btn.innerHTML = '⚙️ PREPARING AI...';
         btn.disabled = true;
@@ -664,7 +654,7 @@ async function toggleFlightMission() {
         progressContainer.style.display = 'block';
         progressText.style.display = 'block';
         progressBar.style.width = '0%';
-        progressText.innerText = 'Counting captures...';
+        progressText.innerText = 'Connecting to folder...';
 
         logToTerminal(`> Mission complete. Engaging YOLO AI processing engine...`, '#F59E0B');
         
@@ -672,14 +662,12 @@ async function toggleFlightMission() {
             await fetch('/api/mission/stop', { method: 'POST' });
             isFlightActive = false;
             
-            // Poll Backend every 1000ms for ultra-smooth UI updates
             const pollInterval = setInterval(async () => {
                 const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
                 const statusData = await statusRes.json();
                 
                 if (statusData.status === 'Processing') {
                     progressBar.style.width = `${statusData.progress}%`;
-                    
                     if (statusData.total > 0) {
                         progressText.innerText = `Analyzing Frames: ${statusData.processed} / ${statusData.total} Complete`;
                         btn.innerHTML = `⚙️ PROCESSING AI... ${statusData.progress}%`;
@@ -698,8 +686,8 @@ async function toggleFlightMission() {
                     btn.style.background = '#10B981';
                     
                     if (statusData.total === 0) {
-                        logToTerminal(`> AI Complete. No defects were captured during flight.`, '#64748B');
-                        document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">❌ No frames captured. Flight too short.</p>';
+                        logToTerminal(`> AI Complete. No images were captured by the drone during flight.`, '#64748B');
+                        document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">❌ No frames captured. Ensure drone is connected.</p>';
                     } else {
                         logToTerminal(`> AI Processing Complete! Filtering and saving defects to Database.`, '#22C55E');
                         fetchLiveCaptures(); 

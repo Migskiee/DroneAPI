@@ -80,7 +80,7 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
     overflow-x: hidden;
     padding-right: 10px; 
     width: 100%;
-    align-content: flex-start; /* Stops rows from stretching vertically */
+    align-content: flex-start; 
 }
 .gallery-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: transform 0.2s; cursor: pointer; }
 .gallery-card:hover { transform: translateY(-2px); box-shadow: 0 8px 12px -3px rgba(0,0,0,0.1); border-color:#3b82f6; }
@@ -119,7 +119,7 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .span-btn:hover { background: #e2e8f0; }
 .span-btn.active { background: #2563EB; color: white; border-color: #1d4ed8; }
 
-/* STRICT LOCK: Live Captures (Wraps by Column) */
+/* STRICT LOCK: Live Captures (Wraps by Column/Horizontal scroll) */
 .recent-captures-panel { 
     background: white; padding: 15px 20px; border-radius: 8px; border: 1px solid #e2e8f0; 
     height: 250px; min-height: 250px; max-height: 250px; /* Absolute lock */
@@ -130,8 +130,8 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
     flex-direction: column; /* Force wrap by column */
     flex-wrap: wrap; /* Wrap to next column when full */
     gap: 15px; 
-    overflow-x: auto; 
-    overflow-y: hidden; 
+    overflow-x: auto; /* Allow horizontal scrolling */
+    overflow-y: auto; /* Prevent vertical stretching */
     padding-bottom: 10px; height: 100%; align-content: flex-start; scroll-behavior: smooth;
 }
 .live-capture-card { 
