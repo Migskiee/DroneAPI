@@ -68,9 +68,10 @@ function closeImagePreview() {
     document.getElementById('previewImageSrc').src = '';
 }
 
+// --- FIX: ADDED { cache: 'no-store' } TO BUST THE BROWSER CACHE ---
 async function fetchDatabaseStats() {
     try {
-        const response = await fetch('/api/bridge-data');
+        const response = await fetch('/api/bridge-data', { cache: 'no-store' });
         const data = await response.json();
 
         if (data.status === "success") {
@@ -480,8 +481,9 @@ async function startAiAnalysis() {
             body: JSON.stringify({ mission_id: currentActiveMission })
         });
         
+        // FIX: Added cache busting here so the progress bar updates properly
         const pollInterval = setInterval(async () => {
-            const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
+            const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`, { cache: 'no-store' });
             const statusData = await statusRes.json();
             
             if (statusData.status === 'Processing') {
@@ -522,7 +524,7 @@ function applyGalleryFilters() {
     renderImageGallery(filteredImages);
 }
 
-// --- NEW: SPLIT GALLERY RENDERER ---
+// --- SPLIT GALLERY RENDERER ---
 function renderImageGallery(images) {
     const containerDefects = document.getElementById('galleryContainerDefects');
     const containerRaw = document.getElementById('galleryContainerRaw');
@@ -535,7 +537,6 @@ function renderImageGallery(images) {
         return;
     }
 
-    // Separate the images based on the AI's findings
     const defectImages = images.filter(img => {
         const t = (img.defect_type || img.type || '');
         return t !== 'Raw Image' && t !== 'Unknown Defect';
@@ -559,7 +560,7 @@ function renderImageGallery(images) {
     }
 }
 
-// --- HELPER TO BUILD THE GRIDS ---
+// --- HELPER TO BUILD THE GRIDS WITH UPDATED LABELS ---
 function buildGalleryGrid(imageArray, container) {
     const groupedBySpan = {};
     imageArray.forEach(img => {
@@ -579,7 +580,7 @@ function buildGalleryGrid(imageArray, container) {
         
         const grid = document.createElement('div');
         grid.className = 'image-gallery-grid';
-        grid.style.maxHeight = '350px'; // Shrunk slightly so both grids fit beautifully
+        grid.style.maxHeight = '350px'; 
 
         spanImages.forEach(img => {
             const rawUrl = img.image_url || img.url || '';
@@ -591,14 +592,15 @@ function buildGalleryGrid(imageArray, container) {
             let topBadge = '';
             let typeHtml = `<strong style="color: #dc2626;">🚨 Type:</strong> <strong>${defectType}</strong>`;
             
+            // FIX: Explicitly updated the labels so they switch immediately to "ANALYZED - SAFE"
             if (defectSeverity === 'Pending') {
-                topBadge = `<span class="health-badge badge-pending" style="position: absolute; top: 8px; right: 8px;">AWAITING AI</span>`;
+                topBadge = `<span class="health-badge badge-pending" style="position: absolute; top: 8px; right: 8px;">⏳ AWAITING AI</span>`;
                 crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">☁️ Stored in Cloud</p>`;
                 typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#64748b;">Raw Surface</strong>`;
             } else if (defectType === 'Raw Image') {
-                topBadge = `<span class="health-badge badge-fair" style="position: absolute; top: 8px; right: 8px;">SAFE</span>`;
-                crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">✅ Verified Safe</p>`;
-                typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#64748b;">Structure Surface</strong>`;
+                topBadge = `<span class="health-badge badge-fair" style="position: absolute; top: 8px; right: 8px;">✅ ANALYZED - SAFE</span>`;
+                crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">🛡️ Verified by AI</p>`;
+                typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#10b981;">Clean Structure</strong>`;
             } else {
                 if (defectSeverity === 'Critical' || defectSeverity === 'High') defectSeverity = 'Bad';
                 if (defectSeverity === 'Review Needed') defectSeverity = 'Poor';
@@ -700,13 +702,14 @@ async function setFlightSpan(span, btnElement) {
     }
 }
 
+// FIX: Added cache busting here too
 async function fetchLiveCaptures() {
     if (!currentActiveMission) return;
     try {
         const gallery = document.getElementById('liveCaptureGallery');
         
         if (isFlightActive) {
-            const res = await fetch(`/api/mission/${currentActiveMission}/live_frames`);
+            const res = await fetch(`/api/mission/${currentActiveMission}/live_frames`, { cache: 'no-store' });
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
                 gallery.innerHTML = data.frames.map(f => `
@@ -773,8 +776,9 @@ async function toggleFlightMission() {
             await fetch('/api/mission/stop', { method: 'POST' });
             isFlightActive = false;
             
+            // FIX: Cache busting on the polling interval
             const pollInterval = setInterval(async () => {
-                const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`);
+                const statusRes = await fetch(`/api/mission/${currentActiveMission}/status`, { cache: 'no-store' });
                 const statusData = await statusRes.json();
                 
                 if (statusData.status === 'Saving to Cloud') {
