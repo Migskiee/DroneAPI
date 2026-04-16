@@ -306,9 +306,41 @@
         </div>
     </div>
 
-    <div id="imagePreviewModal" onclick="closeImagePreview()">
-        <span class="close-preview" onclick="closeImagePreview()">&times;</span>
-        <img id="previewImageSrc" src="" alt="Preview">
+    <div id="imagePreviewModal" onclick="closeImagePreview(event)">
+        <div class="preview-modal-container" onclick="event.stopPropagation()">
+            <div class="preview-image-section">
+                <img id="previewImageSrc" src="" alt="Preview">
+            </div>
+            <div class="preview-info-section">
+                <span class="close-preview" onclick="closeImagePreview(event)">&times;</span>
+                <h3 style="color: #0f172a; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; padding-right: 30px;">Analysis Details</h3>
+                
+                <div class="preview-info-row">
+                    <span class="preview-info-label">Defect Type</span>
+                    <span class="preview-info-value" id="previewType">Loading...</span>
+                </div>
+                
+                <div class="preview-info-row">
+                    <span class="preview-info-label">Severity Level</span>
+                    <span class="preview-info-value" id="previewSeverity">Loading...</span>
+                </div>
+                
+                <div class="preview-info-row">
+                    <span class="preview-info-label">Defect Size</span>
+                    <span class="preview-info-value" id="previewSize" style="font-family: monospace; font-size: 15px; background: #f1f5f9; padding: 4px 8px; border-radius: 4px; display: inline-block; width: fit-content;">N/A</span>
+                </div>
+                
+                <div class="preview-info-row">
+                    <span class="preview-info-label">Location</span>
+                    <span class="preview-info-value" id="previewSpan">Loading...</span>
+                </div>
+                
+                <div class="preview-info-row">
+                    <span class="preview-info-label">Date Captured</span>
+                    <span class="preview-info-value" id="previewDate" style="font-size: 14px; color: #64748b;">Loading...</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>

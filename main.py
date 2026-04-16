@@ -35,6 +35,8 @@ try:
     cursor = conn.cursor()
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS remarks TEXT;")
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS span_count INTEGER DEFAULT 1;")
+    # NEW: Added column to store physical dimensions of the defect
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS defect_size VARCHAR(50) DEFAULT 'N/A';")
     conn.commit()
     cursor.close()
     conn.close()
@@ -81,7 +83,7 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
     elif "water" in dt or "infiltration" in dt: return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- PHASE 1: RAW UPLOAD WORKER (Runs immediately after flight stops) ---
+# --- PHASE 1: RAW UPLOAD WORKER ---
 def upload_raw_worker(mission_id, span_target):
     print(f"\n☁️ UPLOADING RAW MISSION DATA: {mission_id}")
     try:
@@ -97,14 +99,13 @@ def upload_raw_worker(mission_id, span_target):
         for file in files:
             filepath = os.path.join(TEMP_DIR, file)
             try:
-                # 1. Upload the raw image directly to Cloudinary
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
                 
-                # 2. Save to Database as 'Pending Analysis'
+                # FIXED: Included defect_size in the initial raw upload
                 cursor.execute("""
-                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level)
-                    VALUES (%s, %s, %s, 'Raw Image', 'Pending')
+                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size)
+                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A')
                 """, (mission_id, span_target, secure_url))
                 conn.commit()
             except Exception as e:
@@ -115,7 +116,6 @@ def upload_raw_worker(mission_id, span_target):
             with state_lock:
                 flight_state["mission_progress"][mission_id]["processed"] += 1
 
-        # Mark mission as ready for manual AI processing
         cursor.execute("UPDATE inspection_missions SET status = 'Awaiting Analysis' WHERE id = %s", (mission_id,))
         conn.commit()
         cursor.close(); conn.close()
@@ -128,14 +128,13 @@ def upload_raw_worker(mission_id, span_target):
             if mission_id in flight_state["mission_progress"]:
                 del flight_state["mission_progress"][mission_id]
 
-# --- PHASE 2: AI ANALYSIS WORKER (Triggered manually from web app) ---
+# --- PHASE 2: AI ANALYSIS WORKER ---
 def analyze_mission_worker(mission_id):
     print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id}")
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
         
-        # 1. Fetch all raw images belonging to this mission
         cursor.execute("SELECT id, image_url, span_target FROM captured_images WHERE mission_id = %s", (mission_id,))
         raw_images = cursor.fetchall()
         
@@ -147,7 +146,6 @@ def analyze_mission_worker(mission_id):
         
         for img_id, image_url, span_target in raw_images:
             try:
-                # 2. Download the image from Cloudinary into memory
                 resp = requests.get(image_url)
                 image_array = np.asarray(bytearray(resp.content), dtype=np.uint8)
                 frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
@@ -155,8 +153,7 @@ def analyze_mission_worker(mission_id):
                 has_new_defect = False
                 
                 if frame is not None and model is not None:
-                    # Run YOLO Inference 
-                    results = model.predict(frame, conf=0.5, imgsz=640, verbose=False)
+                    results = model.predict(frame, conf=0.7, imgsz=640, verbose=False)
                     boxes = results[0].boxes
                     
                     if boxes is not None and len(boxes) > 0:
@@ -172,44 +169,36 @@ def analyze_mission_worker(mission_id):
                             defect_type = model.names[cls_id].replace("_", " ").title()
                             severity = assess_defect_severity(defect_type, width_mm, height_mm)
                             
-                            # Define box color based on severity
-                            box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
+                            # Size format for the database and sidebar
+                            size_str = f"{width_mm:.1f}x{height_mm:.1f}mm"
                             
-                            # Draw the outer bounding box
+                            box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                             
-                            # --- FIX: Formatted string to include the MM dimensions ---
-                            label_text = f"{defect_type} [{severity}] {width_mm:.1f}x{height_mm:.1f}mm"
-                            
-                            # --- FIX: Draw a solid background box so the text is perfectly readable over the concrete ---
+                            label_text = f"{defect_type} [{severity}] {size_str}"
                             text_size, _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
                             text_w, text_h = text_size
                             
-                            # Draw solid rectangle for text background
                             cv2.rectangle(capture_frame, (int(x1), int(y1) - text_h - 10), (int(x1) + text_w, int(y1)), box_color, -1)
-                            
-                            # Draw the text in white over the colored background
                             cv2.putText(capture_frame, label_text, (int(x1), int(y1) - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                             
-                        # 3. Defect Found! Upload annotated image and update DB
                         tmp_path = f"annotated_{img_id}.jpg"
                         cv2.imwrite(tmp_path, capture_frame)
                         try:
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
                             new_url = upload_result['secure_url']
                             
+                            # FIXED: Now pushing defect_size into the database
                             cursor.execute("""
                                 UPDATE captured_images 
-                                SET image_url = %s, defect_type = %s, severity_level = %s 
+                                SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s
                                 WHERE id = %s
-                            """, (new_url, defect_type, severity, img_id))
+                            """, (new_url, defect_type, severity, size_str, img_id))
                             conn.commit()
                         finally:
                             if os.path.exists(tmp_path): os.remove(tmp_path)
                             
                 if not has_new_defect:
-                    # 4. No Defect Found! Keep the raw image in the database. 
-                    # Change severity from 'Pending' to 'Fair' so it is officially marked as analyzed and safe.
                     cursor.execute("UPDATE captured_images SET severity_level = 'Fair' WHERE id = %s", (img_id,))
                     conn.commit()
                     
@@ -220,7 +209,6 @@ def analyze_mission_worker(mission_id):
             with state_lock:
                 flight_state["mission_progress"][mission_id]["processed"] += 1
                 
-        # 5. Mark Mission as Completed
         cursor.execute("UPDATE inspection_missions SET status = 'Completed' WHERE id = %s", (mission_id,))
         conn.commit()
         cursor.close(); conn.close()
@@ -310,7 +298,6 @@ def stop_mission():
             cursor = conn.cursor()
             cursor.execute("UPDATE inspection_missions SET status = 'Saving to Cloud' WHERE id = %s", (m_id,))
             conn.commit(); cursor.close(); conn.close()
-            # Trigger Phase 1: Upload Raw Data
             threading.Thread(target=upload_raw_worker, args=(m_id, span_target)).start()
         except: pass
     return {"status": "success"}
@@ -330,7 +317,6 @@ def trigger_ai_analysis(params: AnalyzeParams):
         cursor = conn.cursor()
         cursor.execute("UPDATE inspection_missions SET status = 'Processing' WHERE id = %s", (params.mission_id,))
         conn.commit(); cursor.close(); conn.close()
-        
         threading.Thread(target=analyze_mission_worker, args=(params.mission_id,)).start()
         return {"status": "success"}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
@@ -357,17 +343,6 @@ def get_mission_status(mission_id: int):
         return {"status": status_str, "progress": progress, "total": total, "processed": processed}
     except: return {"status": "error"}
 
-@app.get("/api/mission/{mission_id}/captures")
-def get_mission_captures(mission_id: int):
-    try:
-        conn = psycopg2.connect(RAILWAY_DB_URL)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, defect_type, severity_level, image_url, captured_at FROM captured_images WHERE mission_id = %s ORDER BY captured_at DESC LIMIT 6", (mission_id,))
-        captures = [{"id": r[0], "defect_type": r[1], "severity": r[2], "image_url": r[3], "date": r[4]} for r in cursor.fetchall()]
-        cursor.close(); conn.close()
-        return {"status": "success", "captures": captures}
-    except Exception as e: return {"status": "error"}
-
 @app.get("/api/mission/{mission_id}/live_frames")
 def get_live_frames(mission_id: int):
     try:
@@ -379,27 +354,6 @@ def get_live_frames(mission_id: int):
 # ==========================================
 # DATABASE CRUD ENDPOINTS 
 # ==========================================
-@app.post("/api/bridges")
-def add_bridge(bridge: BridgeCreateUpdate):
-    try:
-        conn = psycopg2.connect(RAILWAY_DB_URL)
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO bridges (bridge_code, name, location, remarks, span_count) VALUES (%s, %s, %s, %s, %s) RETURNING id", (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge.span_count))
-        new_id = cursor.fetchone()[0]
-        conn.commit(); cursor.close(); conn.close()
-        return {"status": "success", "bridge_id": new_id}
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/api/bridges/{bridge_id}")
-def update_bridge(bridge_id: int, bridge: BridgeCreateUpdate):
-    try:
-        conn = psycopg2.connect(RAILWAY_DB_URL)
-        cursor = conn.cursor()
-        cursor.execute("UPDATE bridges SET bridge_code = %s, name = %s, location = %s, remarks = %s, span_count = %s WHERE id = %s", (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge.span_count, bridge_id))
-        conn.commit(); cursor.close(); conn.close()
-        return {"status": "success"}
-    except: raise HTTPException(status_code=500)
-
 @app.get("/api/bridge-data")
 def get_bridge_data():
     try:
@@ -424,8 +378,9 @@ def get_bridge_data():
             cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s AND defect_type != 'Raw Image' GROUP BY severity_level", (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
-            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6]} for img in cursor.fetchall()]
+            # FIXED: Modified query to also fetch defect_size (img[7])
+            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
+            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A'} for img in cursor.fetchall()]
 
             bridge_list.append({"db_id": bridge_id, "id": b[1], "name": b[2], "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery, "missions": bridge_missions})
 
@@ -433,22 +388,23 @@ def get_bridge_data():
         return {"status": "success", "stats": {"total_bridges": total_bridges, "total_defects": total_defects, "severity": severity_data}, "bridges": bridge_list}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/defects/{defect_id}")
-def update_defect(defect_id: int, update_data: SeverityUpdate):
+@app.post("/api/bridges")
+def add_bridge(bridge: BridgeCreateUpdate):
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-        cursor.execute("UPDATE captured_images SET severity_level = %s WHERE id = %s", (update_data.severity, defect_id))
+        cursor.execute("INSERT INTO bridges (bridge_code, name, location, remarks, span_count) VALUES (%s, %s, %s, %s, %s) RETURNING id", (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge.span_count))
+        new_id = cursor.fetchone()[0]
         conn.commit(); cursor.close(); conn.close()
-        return {"status": "success"}
-    except: raise HTTPException(status_code=500)
+        return {"status": "success", "bridge_id": new_id}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/defects/{defect_id}")
-def delete_defect(defect_id: int):
+@app.put("/api/bridges/{bridge_id}")
+def update_bridge(bridge_id: int, bridge: BridgeCreateUpdate):
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM captured_images WHERE id = %s", (defect_id,))
+        cursor.execute("UPDATE bridges SET bridge_code = %s, name = %s, location = %s, remarks = %s, span_count = %s WHERE id = %s", (bridge.bridge_code, bridge.name, bridge.location, bridge.remarks, bridge.span_count, bridge_id))
         conn.commit(); cursor.close(); conn.close()
         return {"status": "success"}
     except: raise HTTPException(status_code=500)

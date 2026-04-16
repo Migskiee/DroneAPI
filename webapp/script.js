@@ -56,22 +56,46 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
-function openImagePreview(url) {
-    const modal = document.getElementById('imagePreviewModal');
-    const img = document.getElementById('previewImageSrc');
-    img.src = url;
-    modal.style.display = 'flex';
+// --- NEW: Injecting the Database info dynamically into the Modal ---
+function openImagePreview(imgId) {
+    const data = window.imageMetaData ? window.imageMetaData[imgId] : null;
+    if (!data) return;
+
+    document.getElementById('previewImageSrc').src = data.url;
+    document.getElementById('previewType').innerText = data.type;
+    
+    let sevClass = 'badge-fair';
+    if(data.severity === 'Bad') sevClass = 'badge-bad';
+    else if(data.severity === 'Poor') sevClass = 'badge-poor';
+    else if(data.severity === 'Pending') sevClass = 'badge-pending';
+
+    document.getElementById('previewSeverity').innerHTML = `<span class="health-badge ${sevClass}" style="margin:0; font-size: 13px; padding: 6px 12px;">${data.severity.toUpperCase()}</span>`;
+    document.getElementById('previewSize').innerText = data.size;
+    document.getElementById('previewSpan').innerText = data.span;
+    document.getElementById('previewDate').innerText = data.date;
+
+    document.getElementById('imagePreviewModal').style.display = 'flex';
 }
 
-function closeImagePreview() {
+function openLivePreview(url) {
+    document.getElementById('previewImageSrc').src = url;
+    document.getElementById('previewType').innerText = 'Raw Unprocessed Frame';
+    document.getElementById('previewSeverity').innerHTML = `<span class="health-badge badge-pending" style="margin:0; font-size: 13px; padding: 6px 12px;">AWAITING AI</span>`;
+    document.getElementById('previewSize').innerText = 'N/A';
+    document.getElementById('previewSpan').innerText = 'Active Flight Zone';
+    document.getElementById('previewDate').innerText = new Date().toLocaleString();
+
+    document.getElementById('imagePreviewModal').style.display = 'flex';
+}
+
+function closeImagePreview(event) {
+    if (event && event.target.id !== 'imagePreviewModal' && !event.target.classList.contains('close-preview')) return;
     document.getElementById('imagePreviewModal').style.display = 'none';
     document.getElementById('previewImageSrc').src = '';
 }
 
-// --- FIX: Bulletproof Cache Busting with ?t=${timestamp} ---
 async function fetchDatabaseStats() {
     try {
-        // Appending the time forces the browser to ignore its cache!
         const response = await fetch(`/api/bridge-data?t=${new Date().getTime()}`);
         const data = await response.json();
 
@@ -176,26 +200,6 @@ async function saveBridge() {
             fetchDatabaseStats(); 
         } else alert('Database update failed.');
     } catch (error) { console.error("Network Error:", error); }
-}
-
-async function updateDefectSeverity(defectId, dropdownElement) {
-    const newSeverity = dropdownElement.value;
-    try {
-        const response = await fetch(`/api/defects/${defectId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ severity: newSeverity })
-        });
-        if(response.ok) fetchDatabaseStats(); 
-    } catch (e) { console.error("Update failed", e); }
-}
-
-async function deleteDefect(defectId) {
-    if(!confirm("Are you sure you want to permanently delete this record?")) return;
-    try {
-        const response = await fetch(`/api/defects/${defectId}`, { method: 'DELETE' });
-        if(response.ok) fetchDatabaseStats(); 
-    } catch (e) { console.error("Delete failed", e); }
 }
 
 async function saveBridgeRemarks() {
@@ -483,7 +487,6 @@ async function startAiAnalysis() {
         });
         
         const pollInterval = setInterval(async () => {
-            // FIX: Added Cache Busting to Status Polling
             const statusRes = await fetch(`/api/mission/${currentActiveMission}/status?t=${new Date().getTime()}`);
             const statusData = await statusRes.json();
             
@@ -500,7 +503,6 @@ async function startAiAnalysis() {
                 btn.style.background = '#10b981';
                 progressText.innerText = 'Database updated successfully!';
                 
-                // Allow a tiny delay for DB settling, then fully refresh data!
                 setTimeout(() => { fetchDatabaseStats(); }, 1500);
             }
         }, 1000); 
@@ -563,6 +565,10 @@ function renderImageGallery(images) {
 
 function buildGalleryGrid(imageArray, container) {
     const groupedBySpan = {};
+    
+    // Clear global cache and re-populate
+    window.imageMetaData = window.imageMetaData || {};
+
     imageArray.forEach(img => {
         const span = img.span_target || img.span || 'Unknown Span';
         if (!groupedBySpan[span]) groupedBySpan[span] = [];
@@ -580,57 +586,57 @@ function buildGalleryGrid(imageArray, container) {
         
         const grid = document.createElement('div');
         grid.className = 'image-gallery-grid';
-        grid.style.maxHeight = '350px'; 
-
+        
         spanImages.forEach(img => {
             const rawUrl = img.image_url || img.url || '';
             const imgSrc = rawUrl.startsWith('http') ? rawUrl : 'https://via.placeholder.com/300x200?text=No+Image+Available';
             const defectType = img.defect_type || img.type || 'Unknown Defect';
             let defectSeverity = img.severity || 'Fair';
             
-            let crudHtml = '';
             let topBadge = '';
             let typeHtml = `<strong style="color: #dc2626;">🚨 Type:</strong> <strong>${defectType}</strong>`;
+            let statusHtml = '';
             
             if (defectSeverity === 'Pending') {
                 topBadge = `<span class="health-badge badge-pending" style="position: absolute; top: 8px; right: 8px;">⏳ AWAITING AI</span>`;
-                crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">☁️ Stored in Cloud</p>`;
                 typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#64748b;">Raw Surface</strong>`;
+                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">☁️ Stored in Cloud</p>`;
             } else if (defectType === 'Raw Image') {
                 topBadge = `<span class="health-badge badge-fair" style="position: absolute; top: 8px; right: 8px;">✅ ANALYZED - SAFE</span>`;
-                crudHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; text-align: center;">🛡️ Verified by AI</p>`;
                 typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#10b981;">Clean Structure</strong>`;
+                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">🛡️ Verified by AI</p>`;
             } else {
                 if (defectSeverity === 'Critical' || defectSeverity === 'High') defectSeverity = 'Bad';
                 if (defectSeverity === 'Review Needed') defectSeverity = 'Poor';
                 
                 let badgeColorClass = defectSeverity === 'Bad' ? 'badge-bad' : (defectSeverity === 'Poor' ? 'badge-poor' : 'badge-fair');
                 topBadge = `<span class="health-badge ${badgeColorClass}" style="position: absolute; top: 8px; right: 8px;">${defectSeverity.toUpperCase()}</span>`;
-                
-                crudHtml = `
-                    <div class="crud-controls">
-                        <select class="form-control" style="width: 60%; padding: 5px; font-size: 12px;" onchange="updateDefectSeverity(${img.id || img.defect_id}, this)">
-                            <option value="Bad" ${defectSeverity === 'Bad' ? 'selected' : ''}>Bad</option>
-                            <option value="Poor" ${defectSeverity === 'Poor' ? 'selected' : ''}>Poor</option>
-                            <option value="Fair" ${defectSeverity === 'Fair' ? 'selected' : ''}>Fair</option>
-                        </select>
-                        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteDefect(${img.id || img.defect_id})">🗑️ Delete</button>
-                    </div>`;
+                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">🚨 Defect Logged in Database</p>`;
             }
             
             const dateStr = img.date || img.created_at || img.captured_at ? new Date(img.date || img.created_at || img.captured_at).toLocaleString() : 'Recent Capture';
             
+            // Push to metadata array for the modal
+            window.imageMetaData[img.id] = {
+                url: imgSrc,
+                type: defectType,
+                severity: defectSeverity,
+                date: dateStr,
+                span: span,
+                size: img.size && img.size !== 'N/A' ? img.size : 'N/A'
+            };
+
             const card = document.createElement('div');
             card.className = 'gallery-card';
             card.innerHTML = `
                 <div style="position: relative;">
                     ${topBadge}
-                    <img src="${imgSrc}" class="gallery-img" alt="Capture" onclick="openImagePreview('${imgSrc}')">
+                    <img src="${imgSrc}" class="gallery-img" alt="Capture" onclick="openImagePreview(${img.id})">
                 </div>
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;">${typeHtml}</p>
-                    <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">🕒 ${dateStr}</p>
-                    ${crudHtml}
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 5px;">🕒 ${dateStr}</p>
+                    ${statusHtml}
                 </div>
             `;
             grid.appendChild(card);
@@ -701,7 +707,6 @@ async function setFlightSpan(span, btnElement) {
     }
 }
 
-// FIX: Added cache busting here too
 async function fetchLiveCaptures() {
     if (!currentActiveMission) return;
     try {
@@ -712,7 +717,7 @@ async function fetchLiveCaptures() {
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
                 gallery.innerHTML = data.frames.map(f => `
-                    <div class="live-capture-card" onclick="openImagePreview('${f.url}')">
+                    <div class="live-capture-card" onclick="openLivePreview('${f.url}')">
                         <span class="health-badge badge-fair" style="position: absolute; top: 5px; right: 5px;">Raw Frame</span>
                         <img src="${f.url}" alt="Raw Capture">
                         <div class="live-capture-info">Auto-Capture</div>
@@ -776,7 +781,6 @@ async function toggleFlightMission() {
             isFlightActive = false;
             
             const pollInterval = setInterval(async () => {
-                // FIX: Added cache busting to the polling
                 const statusRes = await fetch(`/api/mission/${currentActiveMission}/status?t=${new Date().getTime()}`);
                 const statusData = await statusRes.json();
                 
