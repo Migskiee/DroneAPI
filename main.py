@@ -99,11 +99,13 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
         return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- POST-MISSION BATCH AI PROCESSOR ---
+# --- POST-MISSION BATCH AI PROCESSOR (WITH DEBUG LOGS) ---
 def post_mission_ai_processor(mission_id, span_target):
+    print(f"\n🟢 STARTED AI PROCESSING FOR MISSION {mission_id}")
     try:
         files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
         total_files = len(files)
+        print(f"📁 Found {total_files} High-Res images captured by the drone in {TEMP_DIR}.")
         
         with state_lock:
             flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
@@ -141,11 +143,13 @@ def post_mission_ai_processor(mission_id, span_target):
                             box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                             cv2.putText(capture_frame, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                            print(f"⚠️ DEFECT FOUND: {defect_type} ({severity})")
                     
                     if has_new_defect:
                         tmp_path = f"upload_{mission_id}_{int(time.time()*1000)}.jpg"
                         cv2.imwrite(tmp_path, capture_frame)
                         try:
+                            print(f"☁️ Uploading {tmp_path} to Cloudinary...")
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
                             secure_url = upload_result['secure_url']
                             
@@ -158,8 +162,9 @@ def post_mission_ai_processor(mission_id, span_target):
                             conn.commit()
                             cursor.close()
                             conn.close()
+                            print("✅ Successfully saved defect to PostgreSQL Database!")
                         except Exception as e:
-                            print(f"Cloud sync failed: {e}")
+                            print(f"❌ Cloud sync failed: {e}")
                         finally:
                             if os.path.exists(tmp_path):
                                 os.remove(tmp_path)
@@ -172,7 +177,7 @@ def post_mission_ai_processor(mission_id, span_target):
                 flight_state["mission_progress"][mission_id]["processed"] += 1
                 
     except Exception as e:
-        print(f"AI Processor Background Crash: {e}")
+        print(f"❌ AI Processor Background Crash: {e}")
         
     finally:
         try:
@@ -188,6 +193,7 @@ def post_mission_ai_processor(mission_id, span_target):
         with state_lock:
             if mission_id in flight_state["mission_progress"]:
                 del flight_state["mission_progress"][mission_id]
+        print(f"🏁 AI BATCH PROCESSING COMPLETE FOR MISSION {mission_id}\n")
 
 # ==========================================
 # UPLINK AND DOWNLINK
@@ -224,7 +230,6 @@ async def websocket_uplink(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Drone WebSocket disconnected.")
     finally:
-        # FIX: Ensure the server wipes the video memory when the drone disconnects!
         with state_lock:
             flight_state["latest_raw_frame"] = None
 
