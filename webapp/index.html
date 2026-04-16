@@ -129,9 +129,23 @@
                         <h2 id="missionDetailTitle">Mission Data</h2>
                         <p id="missionDetailSubtitle" class="text-muted">Loading...</p>
                     </div>
-                    <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
 
-                        <div class="detail-analytics" style="width: 100%;">
+                    <div id="missionActionContainer" style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #8b5cf6; display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3 style="margin-bottom: 5px; color: #0f172a;">Data Ready for Analysis</h3>
+                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images have been securely backed up to the cloud. Run the YOLO AI to detect defects.</p>
+                            </div>
+                            <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 20px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
+                        </div>
+                        <div id="analysisProgressBarContainer" style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
+                            <div id="analysisProgressBar" style="width: 0%; height: 100%; background: #8b5cf6; transition: width 0.3s ease;"></div>
+                        </div>
+                        <p id="analysisProgressText" style="display: none; text-align: center; font-size: 13px; color: #64748b; margin-top: 8px; font-weight: bold;">0 / 0 Frames Analyzed</p>
+                    </div>
+
+                    <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
+                        <div class="detail-analytics" style="width: 100%;" id="defectChartContainer">
                             <h3>Mission Defect Distribution</h3>
                             <p class="text-muted">Defect severity breakdown specific to this flight only.</p>
                             <div class="chart-container" style="height: 250px;">
@@ -149,7 +163,8 @@
                                 <div class="gallery-filters">
                                     <select id="filterType" class="form-control filter-select"
                                         onchange="applyGalleryFilters()">
-                                        <option value="all">All Defect Types</option>
+                                        <option value="all">All Types</option>
+                                        <option value="Raw Image">Raw Images (Unprocessed)</option>
                                         <option value="Chipping">Chipping</option>
                                         <option value="Crack">Crack</option>
                                         <option value="Water Infiltration">Water Infiltration</option>
@@ -160,7 +175,6 @@
                             </div>
                             <div id="galleryContainer"></div>
                         </div>
-
                     </div>
                 </div>
             </section>
@@ -190,8 +204,7 @@
                         </div>
 
                         <div class="recent-captures-panel">
-                            <h3
-                                style="font-size: 16px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px;">
+                            <h3 style="font-size: 16px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px;">
                                 Live Camera Captures (Automated)</h3>
                             <div id="liveCaptureGallery" class="live-gallery">
                                 <p class="text-muted" style="margin-top: 10px;">Awaiting mission start to begin
@@ -200,8 +213,7 @@
                         </div>
                     </div>
 
-                    <div
-                        style="flex: 1; display: flex; flex-direction: column; gap: 15px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 15px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
                         <h3 style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 8px;">Flight
                             Parameters</h3>
 
@@ -225,12 +237,12 @@
                         <div id="aiProgressBarContainer"
                             style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 5px; height: 10px; overflow: hidden;">
                             <div id="aiProgressBar"
-                                style="width: 0%; height: 100%; background: #F59E0B; transition: width 0.3s ease;">
+                                style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.3s ease;">
                             </div>
                         </div>
                         <p id="aiProgressText"
                             style="display: none; text-align: center; font-size: 12px; color: #64748b; margin-top: 5px; font-weight: bold;">
-                            0 / 0 Frames Analyzed</p>
+                            0 / 0 Files Uploaded</p>
 
                         <div id="flightLogTerminal"
                             style="background: #0F172A; color: #38BDF8; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 6px; height: 150px; overflow-y: auto; margin-top: 15px;">
