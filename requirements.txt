@@ -9,5 +9,5 @@ cloudinary
 psycopg2-binary
 ultralytics
 pydantic
-numpy
+numpy<2.0.0
 websockets
