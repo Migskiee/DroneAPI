@@ -1,12 +1,12 @@
+numpy==1.26.4
+opencv-python-headless==4.9.0.80
+torch @ https://download.pytorch.org/whl/cpu/torch-2.2.2%2Bcpu-cp310-cp310-linux_x86_64.whl
+torchvision @ https://download.pytorch.org/whl/cpu/torchvision-0.17.2%2Bcpu-cp310-cp310-linux_x86_64.whl
 fastapi
 uvicorn
-opencv-python-headless==4.9.0.80
 requests
 cloudinary
 psycopg2-binary
 pydantic
 websockets
-numpy==1.26.4
 ultralytics
-torch @ https://download.pytorch.org/whl/cpu/torch-2.2.2%2Bcpu-cp310-cp310-linux_x86_64.whl
-torchvision @ https://download.pytorch.org/whl/cpu/torchvision-0.17.2%2Bcpu-cp310-cp310-linux_x86_64.whl
