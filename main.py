@@ -156,7 +156,7 @@ def analyze_mission_worker(mission_id):
                 
                 if frame is not None and model is not None:
                     # Run YOLO Inference 
-                    results = model.predict(frame, conf=0.2, imgsz=640, verbose=False)
+                    results = model.predict(frame, conf=0.5, imgsz=640, verbose=False)
                     boxes = results[0].boxes
                     
                     if boxes is not None and len(boxes) > 0:
@@ -172,9 +172,24 @@ def analyze_mission_worker(mission_id):
                             defect_type = model.names[cls_id].replace("_", " ").title()
                             severity = assess_defect_severity(defect_type, width_mm, height_mm)
                             
+                            # Define box color based on severity
                             box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
+                            
+                            # Draw the outer bounding box
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
-                            cv2.putText(capture_frame, f"{defect_type} [{severity}]", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                            
+                            # --- FIX: Formatted string to include the MM dimensions ---
+                            label_text = f"{defect_type} [{severity}] {width_mm:.1f}x{height_mm:.1f}mm"
+                            
+                            # --- FIX: Draw a solid background box so the text is perfectly readable over the concrete ---
+                            text_size, _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+                            text_w, text_h = text_size
+                            
+                            # Draw solid rectangle for text background
+                            cv2.rectangle(capture_frame, (int(x1), int(y1) - text_h - 10), (int(x1) + text_w, int(y1)), box_color, -1)
+                            
+                            # Draw the text in white over the colored background
+                            cv2.putText(capture_frame, label_text, (int(x1), int(y1) - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                             
                         # 3. Defect Found! Upload annotated image and update DB
                         tmp_path = f"annotated_{img_id}.jpg"
