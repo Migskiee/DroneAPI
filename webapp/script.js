@@ -514,6 +514,40 @@ function renderImageGallery(images) {
     });
 }
 
+// --- NEW: STREAM CONNECTION LOGIC ---
+document.addEventListener('DOMContentLoaded', () => {
+    const streamImg = document.getElementById('liveVideoStream');
+    const offlineOverlay = document.getElementById('offlineOverlay');
+
+    if (streamImg) {
+        // If the stream breaks or server disconnects, show OFFLINE
+        streamImg.onerror = function() {
+            this.style.display = 'none';
+            offlineOverlay.style.display = 'flex';
+            logToTerminal(`> WARNING: Video stream connection lost.`, '#EF4444');
+        };
+        
+        // If the stream reconnects, hide OFFLINE
+        streamImg.onload = function() {
+            this.style.display = 'block';
+            offlineOverlay.style.display = 'none';
+        };
+    }
+});
+
+// Function attached to the "Retry Connection" button
+window.retryStream = function() {
+    const streamImg = document.getElementById('liveVideoStream');
+    const offlineOverlay = document.getElementById('offlineOverlay');
+    
+    logToTerminal(`> Attempting to re-establish video link...`, '#FACC15');
+    offlineOverlay.style.display = 'none'; 
+    streamImg.style.display = 'block';
+    
+    // Force the browser to bypass cache and try loading the stream again
+    streamImg.src = "/video_feed?t=" + new Date().getTime();
+};
+
 // ==========================================
 // LIVE FLIGHT GCS LOGIC
 // ==========================================
