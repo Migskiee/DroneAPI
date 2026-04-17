@@ -17,6 +17,7 @@
             <li><a href="#" class="nav-link" data-target="bridges">BRIDGE DATABASE</a></li>
             <li><a href="#" class="nav-link" data-target="live-flight" style="color: #2563EB; font-weight: bold;">
                     LIVE FLIGHT</a></li>
+            <li><a href="#" class="nav-link" data-target="settings" style="color: #64748B; font-weight: bold; margin-top: 20px; border-top: 1px solid #e2e8f0;">⚙️ SETTINGS</a></li>
         </ul>
     </div>
 
@@ -131,33 +132,12 @@
                     </div>
 
                     <div id="missionActionContainer" style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #8b5cf6; display: none;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <h3 style="margin-bottom: 5px; color: #0f172a;">Data Ready for Analysis</h3>
-                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images have been securely backed up. Set your parameters and run the YOLO AI.</p>
+                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images have been securely backed up. Configure your parameters in the <b>Settings</b> tab, then run the YOLO AI.</p>
                             </div>
-                        </div>
-                        
-                        <div style="background: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #cbd5e1; display: flex; gap: 30px; align-items: center;">
-                            <div style="flex: 1;">
-                                <label style="font-size: 13px; font-weight: bold; color: #334155; display: flex; justify-content: space-between;">
-                                    Confidence Threshold <span id="confDisplay" style="color: #3b82f6;">50%</span>
-                                </label>
-                                <input type="range" id="aiConfSlider" min="10" max="95" value="50" style="width: 100%; margin-top: 8px; cursor: pointer;">
-                                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Lower to find faint defects, raise to ignore false positives.</p>
-                            </div>
-                            <div style="flex: 1;">
-                                <label style="font-size: 13px; font-weight: bold; color: #334155; margin-bottom: 8px; display: block;">Image Resolution (imgsz)</label>
-                                <select id="aiImgSizeSelect" class="form-control" style="padding: 8px 12px; font-size: 13px;">
-                                    <option value="640">640px (Standard & Fast)</option>
-                                    <option value="800">800px (Detailed)</option>
-                                    <option value="1024">1024px (Deep Scan - Slow)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style="display: flex; justify-content: flex-end;">
-                            <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; width: 100%; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
+                            <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
                         </div>
                         
                         <div id="analysisProgressBarContainer" style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
@@ -299,6 +279,32 @@
                             > GCS Cloud Link Established...<br>
                             > Awaiting pilot command...<br>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="settings" class="content-section" style="display:none;">
+                <h2 class="section-title">SYSTEM SETTINGS</h2>
+                
+                <div style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-width: 800px;">
+                    <h3 style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 25px;">🧠 Artificial Intelligence Configuration</h3>
+                    
+                    <div style="margin-bottom: 30px;">
+                        <label style="font-size: 15px; font-weight: bold; color: #334155; display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            Confidence Threshold <span id="confDisplay" style="color: #3b82f6; font-size: 18px;">50%</span>
+                        </label>
+                        <input type="range" id="aiConfSlider" min="10" max="95" value="50" style="width: 100%; cursor: pointer;">
+                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Lower to find faint defects, raise to ignore false positives.</p>
+                    </div>
+
+                    <div>
+                        <label style="font-size: 15px; font-weight: bold; color: #334155; margin-bottom: 10px; display: block;">Image Resolution (imgsz)</label>
+                        <select id="aiImgSizeSelect" class="form-control" style="padding: 12px; font-size: 15px; width: 100%; max-width: 400px;">
+                            <option value="640">640px (Standard & Fast)</option>
+                            <option value="800">800px (Detailed)</option>
+                            <option value="1024">1024px (Deep Scan - Slow)</option>
+                        </select>
+                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Higher resolutions improve small defect detection but require more server RAM processing time.</p>
                     </div>
                 </div>
             </section>
