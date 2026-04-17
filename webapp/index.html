@@ -135,7 +135,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <h3 style="margin-bottom: 5px; color: #0f172a;">Data Ready for Analysis</h3>
-                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images have been securely backed up. Configure your parameters in the <b>Settings</b> tab, then run the YOLO AI.</p>
+                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images securely backed up. Ensure parameters are set in the <b>Settings</b> tab, then run YOLO AI.</p>
                             </div>
                             <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
                         </div>
@@ -297,7 +297,7 @@
                         <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Lower to find faint defects, raise to ignore false positives.</p>
                     </div>
 
-                    <div>
+                    <div style="margin-bottom: 35px;">
                         <label style="font-size: 15px; font-weight: bold; color: #334155; margin-bottom: 10px; display: block;">Image Resolution (imgsz)</label>
                         <select id="aiImgSizeSelect" class="form-control" style="padding: 12px; font-size: 15px; width: 100%; max-width: 400px;">
                             <option value="640">640px (Standard & Fast)</option>
@@ -306,6 +306,8 @@
                         </select>
                         <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Higher resolutions improve small defect detection but require more server RAM processing time.</p>
                     </div>
+                    
+                    <button id="saveSettingsBtn" class="btn btn-primary" style="background: #10b981; font-size: 16px; padding: 12px 25px;" onclick="saveAiSettings()">💾 Save Configuration</button>
                 </div>
             </section>
 

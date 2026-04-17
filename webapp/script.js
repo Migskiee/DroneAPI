@@ -56,16 +56,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // NEW: Real-time update for the AI confidence slider text
+    // NEW: Load AI settings from browser LocalStorage
+    const savedConf = localStorage.getItem('aiConfThreshold') || '50';
+    const savedSize = localStorage.getItem('aiImgSize') || '640';
+    
     const confSlider = document.getElementById('aiConfSlider');
+    const sizeSelect = document.getElementById('aiImgSizeSelect');
+    const confDisplay = document.getElementById('confDisplay');
+
     if (confSlider) {
+        confSlider.value = savedConf;
+        confDisplay.innerText = savedConf + '%';
         confSlider.addEventListener('input', (e) => {
-            document.getElementById('confDisplay').innerText = e.target.value + '%';
+            confDisplay.innerText = e.target.value + '%';
         });
+    }
+    
+    if (sizeSelect) {
+        sizeSelect.value = savedSize;
     }
 
     fetchDatabaseStats();
 });
+
+// NEW: Function to permanently save settings to the browser
+function saveAiSettings() {
+    const confVal = document.getElementById('aiConfSlider').value;
+    const sizeVal = document.getElementById('aiImgSizeSelect').value;
+    
+    localStorage.setItem('aiConfThreshold', confVal);
+    localStorage.setItem('aiImgSize', sizeVal);
+    
+    const btn = document.getElementById('saveSettingsBtn');
+    btn.innerText = "✅ Configuration Saved!";
+    btn.style.background = "#059669"; // Slightly darker green to show click
+    
+    setTimeout(() => {
+        btn.innerText = "💾 Save Configuration";
+        btn.style.background = "#10b981"; // Revert to standard green
+    }, 2000);
+}
 
 function handleGalleryClick(event, imgId) {
     if (isDeleteMode) {
@@ -560,9 +590,12 @@ async function startAiAnalysis() {
     const progressBar = document.getElementById('analysisProgressBar');
     const progressText = document.getElementById('analysisProgressText');
 
-    // NEW: Capture the dynamic AI settings from the UI
-    const confVal = parseInt(document.getElementById('aiConfSlider').value) / 100.0;
-    const imgSizeVal = parseInt(document.getElementById('aiImgSizeSelect').value);
+    // NEW: Load the parameters dynamically from LocalStorage (or default if null)
+    const savedConf = localStorage.getItem('aiConfThreshold') || '50';
+    const savedSize = localStorage.getItem('aiImgSize') || '640';
+    
+    const confVal = parseInt(savedConf) / 100.0;
+    const imgSizeVal = parseInt(savedSize);
 
     btn.disabled = true;
     btn.innerHTML = '⚙️ RUNNING YOLO AI...';
@@ -577,7 +610,6 @@ async function startAiAnalysis() {
         await fetch('/api/mission/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // NEW: Send the parameters to the backend
             body: JSON.stringify({ 
                 mission_id: currentActiveMission,
                 conf_threshold: confVal,
