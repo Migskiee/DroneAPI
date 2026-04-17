@@ -52,7 +52,6 @@ class SpanUpdateParams(BaseModel): span_target: str
 class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str; remarks: str; span_count: int
 class BulkDeleteParams(BaseModel): image_ids: list[int]
 
-# NEW: Updated to receive the AI settings from the web app
 class AnalyzeParams(BaseModel): 
     mission_id: int
     conf_threshold: float = 0.5
@@ -134,7 +133,6 @@ def upload_raw_worker(mission_id, span_target):
                 del flight_state["mission_progress"][mission_id]
 
 # --- PHASE 2: AI ANALYSIS WORKER ---
-# NEW: Now accepts dynamic configuration parameters
 def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
     print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id} [Conf: {conf_threshold}, Size: {img_size}]")
     try:
@@ -159,13 +157,17 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
                 has_new_defect = False
                 
                 if frame is not None and model is not None:
-                    # NEW: Injected the dynamic settings here
                     results = model.predict(frame, conf=conf_threshold, imgsz=img_size, verbose=False)
                     boxes = results[0].boxes
                     
                     if boxes is not None and len(boxes) > 0:
                         has_new_defect = True
                         capture_frame = frame.copy()
+                        
+                        all_types = []
+                        all_confs = []
+                        all_sizes = []
+                        all_severities = []
                         
                         for i in range(len(boxes)):
                             x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
@@ -181,10 +183,15 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
                             
                             size_str = f"{width_mm:.1f}x{height_mm:.1f}mm"
                             
+                            all_types.append(defect_type)
+                            all_confs.append(conf_str)
+                            all_sizes.append(size_str)
+                            all_severities.append(severity)
+                            
                             box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                             
-                            label_text = f"{defect_type} ({conf_str}) [{severity}] {size_str}"
+                            label_text = f"{defect_type} ({conf_str}) [{severity}]"
                             text_size, _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
                             text_w, text_h = text_size
                             
@@ -197,11 +204,22 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
                             new_url = upload_result['secure_url']
                             
+                            final_defect_types = ", ".join(list(dict.fromkeys(all_types))) 
+                            final_sizes = " | ".join(all_sizes)
+                            final_confs = " | ".join(all_confs)
+                            
+                            if "Bad" in all_severities:
+                                final_severity = "Bad"
+                            elif "Poor" in all_severities:
+                                final_severity = "Poor"
+                            else:
+                                final_severity = "Fair"
+                            
                             cursor.execute("""
                                 UPDATE captured_images 
                                 SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s, confidence_score = %s
                                 WHERE id = %s
-                            """, (new_url, defect_type, severity, size_str, conf_str, img_id))
+                            """, (new_url, final_defect_types, final_severity, final_sizes, final_confs, img_id))
                             conn.commit()
                         finally:
                             if os.path.exists(tmp_path): os.remove(tmp_path)
@@ -325,7 +343,6 @@ def trigger_ai_analysis(params: AnalyzeParams):
         cursor = conn.cursor()
         cursor.execute("UPDATE inspection_missions SET status = 'Processing' WHERE id = %s", (params.mission_id,))
         conn.commit(); cursor.close(); conn.close()
-        # NEW: Pass the frontend settings into the background thread
         threading.Thread(target=analyze_mission_worker, args=(params.mission_id, params.conf_threshold, params.img_size)).start()
         return {"status": "success"}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
@@ -370,8 +387,19 @@ def get_bridge_data():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM bridges")
         total_bridges = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM captured_images WHERE defect_type != 'Raw Image'")
-        total_defects = cursor.fetchone()[0]
+        
+        # Calculate true bounding box instances using the piped confidence strings
+        cursor.execute("SELECT confidence_score FROM captured_images WHERE defect_type != 'Raw Image' AND confidence_score != 'N/A'")
+        all_confs = cursor.fetchall()
+        
+        total_bounding_boxes = 0
+        for conf_row in all_confs:
+            conf_string = conf_row[0]
+            if conf_string:
+                total_bounding_boxes += conf_string.count('|') + 1
+                
+        total_defects = total_bounding_boxes
+
         cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images WHERE defect_type != 'Raw Image' GROUP BY severity_level")
         severity_data = cursor.fetchall()
 
