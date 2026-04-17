@@ -224,11 +224,11 @@ async function saveBridgeRemarks() {
         if(response.ok) {
             btn.innerText = "✅ Saved Successfully!";
             fetchDatabaseStats(); 
-            setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
+            setTimeout(() => { btn.innerText = "💾 SAVE REMARKS"; }, 2000);
         }
     } catch (e) {
         console.error("Save failed", e);
-        btn.innerText = "💾 Save Remarks";
+        btn.innerText = "💾 SAVE REMARKS";
     }
 }
 
@@ -397,7 +397,7 @@ function showBridgeDetails(bridge) {
         card.className = 'mission-card';
         card.onclick = () => showMissionDetails(mId);
         card.innerHTML = `
-            <div><div class="mission-card-title">🚁 ${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
+            <div><div class="mission-card-title">${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
             <div class="mission-card-stats">${mImgs.length} Images</div>
         `;
         missionGrid.appendChild(card);
