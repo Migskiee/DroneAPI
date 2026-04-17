@@ -7,7 +7,6 @@ let currentActiveMission = null;
 let isFlightActive = false;
 let liveCaptureInterval = null;
 
-// NEW: Delete Mode State Variables
 let isDeleteMode = false;
 let selectedForDelete = new Set();
 
@@ -57,10 +56,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // NEW: Real-time update for the AI confidence slider text
+    const confSlider = document.getElementById('aiConfSlider');
+    if (confSlider) {
+        confSlider.addEventListener('input', (e) => {
+            document.getElementById('confDisplay').innerText = e.target.value + '%';
+        });
+    }
+
     fetchDatabaseStats();
 });
 
-// --- NEW: Handlers for the Click events on the gallery cards ---
 function handleGalleryClick(event, imgId) {
     if (isDeleteMode) {
         const card = document.getElementById(`gallery-card-${imgId}`);
@@ -116,7 +122,7 @@ async function confirmBulkDelete() {
         
         if (res.ok) {
             cancelDeleteMode();
-            fetchDatabaseStats(); // Silently refresh the database and UI to erase them
+            fetchDatabaseStats(); 
         } else {
             alert("Failed to delete images from database.");
         }
@@ -129,7 +135,6 @@ async function confirmBulkDelete() {
     }
 }
 
-// --- Preview Controllers ---
 function openImagePreview(imgId) {
     const data = window.imageMetaData ? window.imageMetaData[imgId] : null;
     if (!data) return;
@@ -466,7 +471,7 @@ function showBridgeDetails(bridge) {
         card.className = 'mission-card';
         card.onclick = () => showMissionDetails(mId);
         card.innerHTML = `
-            <div><div class="mission-card-title">🚁 ${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
+            <div><div class="mission-card-title">${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
             <div class="mission-card-stats">${mImgs.length} Images</div>
         `;
         missionGrid.appendChild(card);
@@ -490,19 +495,16 @@ function showMissionDetails(missionId) {
     const chartContainer = document.getElementById('defectChartContainer');
     const deleteControls = document.getElementById('deleteControls');
     
-    // FIXED: Only show the delete controls if the mission is waiting for AI analysis
     if (missionStatus === 'Awaiting Analysis' || missionStatus === 'Processing') {
         actionContainer.style.display = 'block';
         chartContainer.style.display = 'none';
         
-        // Show delete option but make sure it resets
         deleteControls.style.display = 'flex';
         cancelDeleteMode();
     } else {
         actionContainer.style.display = 'none';
         chartContainer.style.display = 'block';
         
-        // Hide completely if analysis is already done
         deleteControls.style.display = 'none';
         isDeleteMode = false;
     }
@@ -550,7 +552,6 @@ function showMissionDetails(missionId) {
 async function startAiAnalysis() {
     if (!currentActiveMission) return;
     
-    // Safety check: close delete mode if it's open
     cancelDeleteMode();
     document.getElementById('deleteControls').style.display = 'none';
     
@@ -558,6 +559,10 @@ async function startAiAnalysis() {
     const progressContainer = document.getElementById('analysisProgressBarContainer');
     const progressBar = document.getElementById('analysisProgressBar');
     const progressText = document.getElementById('analysisProgressText');
+
+    // NEW: Capture the dynamic AI settings from the UI
+    const confVal = parseInt(document.getElementById('aiConfSlider').value) / 100.0;
+    const imgSizeVal = parseInt(document.getElementById('aiImgSizeSelect').value);
 
     btn.disabled = true;
     btn.innerHTML = '⚙️ RUNNING YOLO AI...';
@@ -572,7 +577,12 @@ async function startAiAnalysis() {
         await fetch('/api/mission/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mission_id: currentActiveMission })
+            // NEW: Send the parameters to the backend
+            body: JSON.stringify({ 
+                mission_id: currentActiveMission,
+                conf_threshold: confVal,
+                img_size: imgSizeVal
+            })
         });
         
         const pollInterval = setInterval(async () => {
@@ -716,10 +726,8 @@ function buildGalleryGrid(imageArray, container) {
 
             const card = document.createElement('div');
             card.className = 'gallery-card';
-            // NEW: ID applied to the card wrapper so we can modify its CSS dynamically
             card.id = `gallery-card-${img.id}`; 
             
-            // NEW: The click event is now handled by the custom function 
             card.onclick = (e) => {
                 e.stopPropagation();
                 handleGalleryClick(e, img.id);

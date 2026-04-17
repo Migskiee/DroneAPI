@@ -49,12 +49,14 @@ class SeverityUpdate(BaseModel): severity: str
 class RemarkUpdate(BaseModel): remarks: str
 class MissionStartParams(BaseModel): bridge_id: int; span_target: str
 class SpanUpdateParams(BaseModel): span_target: str
-class AnalyzeParams(BaseModel): mission_id: int
 class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str; remarks: str; span_count: int
+class BulkDeleteParams(BaseModel): image_ids: list[int]
 
-# NEW: Model for handling bulk deletes
-class BulkDeleteParams(BaseModel): 
-    image_ids: list[int]
+# NEW: Updated to receive the AI settings from the web app
+class AnalyzeParams(BaseModel): 
+    mission_id: int
+    conf_threshold: float = 0.5
+    img_size: int = 640
 
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
@@ -132,8 +134,9 @@ def upload_raw_worker(mission_id, span_target):
                 del flight_state["mission_progress"][mission_id]
 
 # --- PHASE 2: AI ANALYSIS WORKER ---
-def analyze_mission_worker(mission_id):
-    print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id}")
+# NEW: Now accepts dynamic configuration parameters
+def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
+    print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id} [Conf: {conf_threshold}, Size: {img_size}]")
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
@@ -156,7 +159,8 @@ def analyze_mission_worker(mission_id):
                 has_new_defect = False
                 
                 if frame is not None and model is not None:
-                    results = model.predict(frame, conf=0.5, imgsz=640, verbose=False)
+                    # NEW: Injected the dynamic settings here
+                    results = model.predict(frame, conf=conf_threshold, imgsz=img_size, verbose=False)
                     boxes = results[0].boxes
                     
                     if boxes is not None and len(boxes) > 0:
@@ -321,7 +325,8 @@ def trigger_ai_analysis(params: AnalyzeParams):
         cursor = conn.cursor()
         cursor.execute("UPDATE inspection_missions SET status = 'Processing' WHERE id = %s", (params.mission_id,))
         conn.commit(); cursor.close(); conn.close()
-        threading.Thread(target=analyze_mission_worker, args=(params.mission_id,)).start()
+        # NEW: Pass the frontend settings into the background thread
+        threading.Thread(target=analyze_mission_worker, args=(params.mission_id, params.conf_threshold, params.img_size)).start()
         return {"status": "success"}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
@@ -422,7 +427,6 @@ def update_bridge_remarks(bridge_id: int, update_data: RemarkUpdate):
         return {"status": "success"}
     except: raise HTTPException(status_code=500)
 
-# NEW: Safely delete multiple raw images from the DB at once
 @app.post("/api/images/bulk-delete")
 def bulk_delete_images(params: BulkDeleteParams):
     try:
@@ -431,8 +435,6 @@ def bulk_delete_images(params: BulkDeleteParams):
             
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-        
-        # Create dynamic format string for the IN clause
         format_strings = ','.join(['%s'] * len(params.image_ids))
         query = f"DELETE FROM captured_images WHERE id IN ({format_strings})"
         

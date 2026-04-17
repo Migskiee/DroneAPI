@@ -130,27 +130,40 @@
                         <p id="missionDetailSubtitle" class="text-muted">Loading...</p>
                     </div>
 
-                    <div id="missionActionContainer"
-                        style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #8b5cf6; display: none;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div id="missionActionContainer" style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #8b5cf6; display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
                             <div>
                                 <h3 style="margin-bottom: 5px; color: #0f172a;">Data Ready for Analysis</h3>
-                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images have been
-                                    securely backed up to the cloud. Run the YOLO AI to detect defects.</p>
-                            </div>
-                            <button id="runAiBtn" class="btn btn-primary"
-                                style="background: #8b5cf6; font-size: 16px; padding: 15px 20px;"
-                                onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
-                        </div>
-                        <div id="analysisProgressBarContainer"
-                            style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
-                            <div id="analysisProgressBar"
-                                style="width: 0%; height: 100%; background: #8b5cf6; transition: width 0.3s ease;">
+                                <p class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images have been securely backed up. Set your parameters and run the YOLO AI.</p>
                             </div>
                         </div>
-                        <p id="analysisProgressText"
-                            style="display: none; text-align: center; font-size: 13px; color: #64748b; margin-top: 8px; font-weight: bold;">
-                            0 / 0 Frames Analyzed</p>
+                        
+                        <div style="background: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #cbd5e1; display: flex; gap: 30px; align-items: center;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 13px; font-weight: bold; color: #334155; display: flex; justify-content: space-between;">
+                                    Confidence Threshold <span id="confDisplay" style="color: #3b82f6;">50%</span>
+                                </label>
+                                <input type="range" id="aiConfSlider" min="10" max="95" value="50" style="width: 100%; margin-top: 8px; cursor: pointer;">
+                                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Lower to find faint defects, raise to ignore false positives.</p>
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 13px; font-weight: bold; color: #334155; margin-bottom: 8px; display: block;">Image Resolution (imgsz)</label>
+                                <select id="aiImgSizeSelect" class="form-control" style="padding: 8px 12px; font-size: 13px;">
+                                    <option value="640">640px (Standard & Fast)</option>
+                                    <option value="800">800px (Detailed)</option>
+                                    <option value="1024">1024px (Deep Scan - Slow)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end;">
+                            <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; width: 100%; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
+                        </div>
+                        
+                        <div id="analysisProgressBarContainer" style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
+                            <div id="analysisProgressBar" style="width: 0%; height: 100%; background: #8b5cf6; transition: width 0.3s ease;"></div>
+                        </div>
+                        <p id="analysisProgressText" style="display: none; text-align: center; font-size: 13px; color: #64748b; margin-top: 8px; font-weight: bold;">0 / 0 Frames Analyzed</p>
                     </div>
 
                     <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
