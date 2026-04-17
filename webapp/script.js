@@ -56,13 +56,15 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
-// --- NEW: Injecting the Database info dynamically into the Modal ---
 function openImagePreview(imgId) {
     const data = window.imageMetaData ? window.imageMetaData[imgId] : null;
     if (!data) return;
 
     document.getElementById('previewImageSrc').src = data.url;
     document.getElementById('previewType').innerText = data.type;
+    
+    // NEW: Inject confidence into the modal
+    document.getElementById('previewConfidence').innerText = data.confidence;
     
     let sevClass = 'badge-fair';
     if(data.severity === 'Bad') sevClass = 'badge-bad';
@@ -80,7 +82,11 @@ function openImagePreview(imgId) {
 function openLivePreview(url) {
     document.getElementById('previewImageSrc').src = url;
     document.getElementById('previewType').innerText = 'Raw Unprocessed Frame';
+    
+    // Default values for live preview
+    document.getElementById('previewConfidence').innerText = 'N/A';
     document.getElementById('previewSeverity').innerHTML = `<span class="health-badge badge-pending" style="margin:0; font-size: 13px; padding: 6px 12px;">AWAITING AI</span>`;
+    
     document.getElementById('previewSize').innerText = 'N/A';
     document.getElementById('previewSpan').innerText = 'Active Flight Zone';
     document.getElementById('previewDate').innerText = new Date().toLocaleString();
@@ -566,7 +572,6 @@ function renderImageGallery(images) {
 function buildGalleryGrid(imageArray, container) {
     const groupedBySpan = {};
     
-    // Clear global cache and re-populate
     window.imageMetaData = window.imageMetaData || {};
 
     imageArray.forEach(img => {
@@ -616,14 +621,15 @@ function buildGalleryGrid(imageArray, container) {
             
             const dateStr = img.date || img.created_at || img.captured_at ? new Date(img.date || img.created_at || img.captured_at).toLocaleString() : 'Recent Capture';
             
-            // Push to metadata array for the modal
+            // NEW: Push the confidence into the metadata array for the modal
             window.imageMetaData[img.id] = {
                 url: imgSrc,
                 type: defectType,
                 severity: defectSeverity,
                 date: dateStr,
                 span: span,
-                size: img.size && img.size !== 'N/A' ? img.size : 'N/A'
+                size: img.size && img.size !== 'N/A' ? img.size : 'N/A',
+                confidence: img.confidence && img.confidence !== 'N/A' ? img.confidence : 'N/A'
             };
 
             const card = document.createElement('div');

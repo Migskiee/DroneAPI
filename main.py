@@ -35,8 +35,9 @@ try:
     cursor = conn.cursor()
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS remarks TEXT;")
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS span_count INTEGER DEFAULT 1;")
-    # NEW: Added column to store physical dimensions of the defect
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS defect_size VARCHAR(50) DEFAULT 'N/A';")
+    # NEW: Added column to store AI confidence level
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS confidence_score VARCHAR(20) DEFAULT 'N/A';")
     conn.commit()
     cursor.close()
     conn.close()
@@ -56,7 +57,8 @@ class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str;
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 try:
-    model = YOLO('AIModel/AIModelFinal.pt')
+    # Set to your V2 model!
+    model = YOLO('AIModel/AIModelFinalV2.pt')
     print("YOLO Model Loaded Successfully!")
 except Exception as e:
     print(f"Warning: YOLO Model not found or failed to load. {e}")
@@ -102,10 +104,10 @@ def upload_raw_worker(mission_id, span_target):
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
                 
-                # FIXED: Included defect_size in the initial raw upload
+                # FIXED: Included confidence_score in the initial raw upload
                 cursor.execute("""
-                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size)
-                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A')
+                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score)
+                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A')
                 """, (mission_id, span_target, secure_url))
                 conn.commit()
             except Exception as e:
@@ -153,7 +155,7 @@ def analyze_mission_worker(mission_id):
                 has_new_defect = False
                 
                 if frame is not None and model is not None:
-                    results = model.predict(frame, conf=0.7, imgsz=640, verbose=False)
+                    results = model.predict(frame, conf=0.5, imgsz=640, verbose=False)
                     boxes = results[0].boxes
                     
                     if boxes is not None and len(boxes) > 0:
@@ -164,18 +166,22 @@ def analyze_mission_worker(mission_id):
                             x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
                             cls_id = int(boxes.cls[i].item())
                             
+                            # NEW: Extract confidence and format as percentage
+                            conf = float(boxes.conf[i].item())
+                            conf_str = f"{int(conf * 100)}%"
+                            
                             width_mm = (x2 - x1) * MM_PER_PIXEL
                             height_mm = (y2 - y1) * MM_PER_PIXEL
                             defect_type = model.names[cls_id].replace("_", " ").title()
                             severity = assess_defect_severity(defect_type, width_mm, height_mm)
                             
-                            # Size format for the database and sidebar
                             size_str = f"{width_mm:.1f}x{height_mm:.1f}mm"
                             
                             box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                             
-                            label_text = f"{defect_type} [{severity}] {size_str}"
+                            # NEW: Add the confidence percentage into the visual bounding box text
+                            label_text = f"{defect_type} ({conf_str}) [{severity}] {size_str}"
                             text_size, _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
                             text_w, text_h = text_size
                             
@@ -188,18 +194,18 @@ def analyze_mission_worker(mission_id):
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
                             new_url = upload_result['secure_url']
                             
-                            # FIXED: Now pushing defect_size into the database
+                            # FIXED: Push the new confidence_score into the database
                             cursor.execute("""
                                 UPDATE captured_images 
-                                SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s
+                                SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s, confidence_score = %s
                                 WHERE id = %s
-                            """, (new_url, defect_type, severity, size_str, img_id))
+                            """, (new_url, defect_type, severity, size_str, conf_str, img_id))
                             conn.commit()
                         finally:
                             if os.path.exists(tmp_path): os.remove(tmp_path)
                             
                 if not has_new_defect:
-                    cursor.execute("UPDATE captured_images SET severity_level = 'Fair' WHERE id = %s", (img_id,))
+                    cursor.execute("UPDATE captured_images SET severity_level = 'Fair', confidence_score = 'N/A' WHERE id = %s", (img_id,))
                     conn.commit()
                     
             except Exception as e:
@@ -378,9 +384,9 @@ def get_bridge_data():
             cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s AND defect_type != 'Raw Image' GROUP BY severity_level", (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            # FIXED: Modified query to also fetch defect_size (img[7])
-            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
-            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A'} for img in cursor.fetchall()]
+            # FIXED: Updated query to also fetch confidence_score (img[8])
+            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
+            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A'} for img in cursor.fetchall()]
 
             bridge_list.append({"db_id": bridge_id, "id": b[1], "name": b[2], "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery, "missions": bridge_missions})
 
