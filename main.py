@@ -36,7 +36,6 @@ try:
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS remarks TEXT;")
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS span_count INTEGER DEFAULT 1;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS defect_size VARCHAR(50) DEFAULT 'N/A';")
-    # NEW: Added column to store AI confidence level
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS confidence_score VARCHAR(20) DEFAULT 'N/A';")
     conn.commit()
     cursor.close()
@@ -53,11 +52,14 @@ class SpanUpdateParams(BaseModel): span_target: str
 class AnalyzeParams(BaseModel): mission_id: int
 class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str; remarks: str; span_count: int
 
+# NEW: Model for handling bulk deletes
+class BulkDeleteParams(BaseModel): 
+    image_ids: list[int]
+
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 try:
-    # Set to your V2 model!
     model = YOLO('AIModel/AIModelFinalV2.pt')
     print("YOLO Model Loaded Successfully!")
 except Exception as e:
@@ -104,7 +106,6 @@ def upload_raw_worker(mission_id, span_target):
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
                 
-                # FIXED: Included confidence_score in the initial raw upload
                 cursor.execute("""
                     INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score)
                     VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A')
@@ -166,7 +167,6 @@ def analyze_mission_worker(mission_id):
                             x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
                             cls_id = int(boxes.cls[i].item())
                             
-                            # NEW: Extract confidence and format as percentage
                             conf = float(boxes.conf[i].item())
                             conf_str = f"{int(conf * 100)}%"
                             
@@ -180,7 +180,6 @@ def analyze_mission_worker(mission_id):
                             box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
                             
-                            # NEW: Add the confidence percentage into the visual bounding box text
                             label_text = f"{defect_type} ({conf_str}) [{severity}] {size_str}"
                             text_size, _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
                             text_w, text_h = text_size
@@ -194,7 +193,6 @@ def analyze_mission_worker(mission_id):
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
                             new_url = upload_result['secure_url']
                             
-                            # FIXED: Push the new confidence_score into the database
                             cursor.execute("""
                                 UPDATE captured_images 
                                 SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s, confidence_score = %s
@@ -384,7 +382,6 @@ def get_bridge_data():
             cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s AND defect_type != 'Raw Image' GROUP BY severity_level", (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            # FIXED: Updated query to also fetch confidence_score (img[8])
             cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
             image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A'} for img in cursor.fetchall()]
 
@@ -424,6 +421,28 @@ def update_bridge_remarks(bridge_id: int, update_data: RemarkUpdate):
         conn.commit(); cursor.close(); conn.close()
         return {"status": "success"}
     except: raise HTTPException(status_code=500)
+
+# NEW: Safely delete multiple raw images from the DB at once
+@app.post("/api/images/bulk-delete")
+def bulk_delete_images(params: BulkDeleteParams):
+    try:
+        if not params.image_ids:
+            return {"status": "success"}
+            
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        
+        # Create dynamic format string for the IN clause
+        format_strings = ','.join(['%s'] * len(params.image_ids))
+        query = f"DELETE FROM captured_images WHERE id IN ({format_strings})"
+        
+        cursor.execute(query, tuple(params.image_ids))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success"}
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 web_path = os.path.join(BASE_DIR, "webapp")

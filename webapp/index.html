@@ -184,14 +184,28 @@
                                 </div>
                             </div>
 
-                            <h4
-                                style="margin-top: 25px; margin-bottom: 15px; color: #ef4444; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
-                                🚨 Detected Defects</h4>
+                            <h4 style="margin-top: 25px; margin-bottom: 15px; color: #ef4444; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+                                🚨 Detected Defects
+                            </h4>
                             <div id="galleryContainerDefects"></div>
 
-                            <h4
-                                style="margin-top: 35px; margin-bottom: 15px; color: #10b981; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
-                                ✅ Raw & Safe Captures</h4>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 35px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+                                <h4 style="margin: 0; color: #10b981;">✅ Raw & Safe Captures</h4>
+                                
+                                <div id="deleteControls" style="display: none; align-items: center; gap: 10px;">
+                                    <button id="startDeleteBtn" class="btn btn-secondary" style="margin:0; padding: 6px 12px; font-size: 13px;" onclick="toggleDeleteMode()">
+                                        🗑️ Select Images to Delete
+                                    </button>
+                                    <div id="activeDeleteControls" style="display: none; gap: 10px; align-items: center;">
+                                        <span id="deleteCount" style="font-size: 14px; font-weight: bold; color: #ef4444;">0 Selected</span>
+                                        <button class="btn btn-secondary" style="margin:0; padding: 6px 12px; font-size: 13px;" onclick="cancelDeleteMode()">Cancel</button>
+                                        <button class="btn btn-primary" style="margin:0; padding: 6px 12px; font-size: 13px; background: #ef4444; border: none;" onclick="confirmBulkDelete()">
+                                            🗑️ Delete Selected
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div id="galleryContainerRaw"></div>
                         </div>
 

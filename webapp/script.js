@@ -7,6 +7,10 @@ let currentActiveMission = null;
 let isFlightActive = false;
 let liveCaptureInterval = null;
 
+// NEW: Delete Mode State Variables
+let isDeleteMode = false;
+let selectedForDelete = new Set();
+
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
     const sections = document.querySelectorAll('.content-section');
@@ -56,14 +60,82 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
+// --- NEW: Handlers for the Click events on the gallery cards ---
+function handleGalleryClick(event, imgId) {
+    if (isDeleteMode) {
+        const card = document.getElementById(`gallery-card-${imgId}`);
+        if (selectedForDelete.has(imgId)) {
+            selectedForDelete.delete(imgId);
+            card.classList.remove('selected-for-delete');
+        } else {
+            selectedForDelete.add(imgId);
+            card.classList.add('selected-for-delete');
+        }
+        document.getElementById('deleteCount').innerText = `${selectedForDelete.size} Selected`;
+    } else {
+        openImagePreview(imgId);
+    }
+}
+
+function toggleDeleteMode() {
+    isDeleteMode = true;
+    selectedForDelete.clear();
+    document.getElementById('startDeleteBtn').style.display = 'none';
+    document.getElementById('activeDeleteControls').style.display = 'flex';
+    document.getElementById('deleteCount').innerText = '0 Selected';
+}
+
+function cancelDeleteMode() {
+    isDeleteMode = false;
+    selectedForDelete.clear();
+    const btn = document.getElementById('startDeleteBtn');
+    if (btn) btn.style.display = 'block';
+    
+    const controls = document.getElementById('activeDeleteControls');
+    if (controls) controls.style.display = 'none';
+    
+    document.querySelectorAll('.gallery-card.selected-for-delete').forEach(card => {
+        card.classList.remove('selected-for-delete');
+    });
+}
+
+async function confirmBulkDelete() {
+    if (selectedForDelete.size === 0) return alert("Select at least one image to delete.");
+    if (!confirm(`Are you sure you want to permanently delete ${selectedForDelete.size} image(s)? This action cannot be undone.`)) return;
+
+    const btn = document.querySelector('#activeDeleteControls .btn-primary');
+    btn.innerText = "Deleting...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/images/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_ids: Array.from(selectedForDelete) })
+        });
+        
+        if (res.ok) {
+            cancelDeleteMode();
+            fetchDatabaseStats(); // Silently refresh the database and UI to erase them
+        } else {
+            alert("Failed to delete images from database.");
+        }
+    } catch (e) {
+        console.error("Delete error:", e);
+        alert("Error deleting images.");
+    } finally {
+        btn.innerText = "🗑️ Delete Selected";
+        btn.disabled = false;
+    }
+}
+
+// --- Preview Controllers ---
 function openImagePreview(imgId) {
     const data = window.imageMetaData ? window.imageMetaData[imgId] : null;
     if (!data) return;
 
     document.getElementById('previewImageSrc').src = data.url;
     document.getElementById('previewType').innerText = data.type;
-    
-    // NEW: Inject confidence into the modal
     document.getElementById('previewConfidence').innerText = data.confidence;
     
     let sevClass = 'badge-fair';
@@ -82,11 +154,8 @@ function openImagePreview(imgId) {
 function openLivePreview(url) {
     document.getElementById('previewImageSrc').src = url;
     document.getElementById('previewType').innerText = 'Raw Unprocessed Frame';
-    
-    // Default values for live preview
     document.getElementById('previewConfidence').innerText = 'N/A';
     document.getElementById('previewSeverity').innerHTML = `<span class="health-badge badge-pending" style="margin:0; font-size: 13px; padding: 6px 12px;">AWAITING AI</span>`;
-    
     document.getElementById('previewSize').innerText = 'N/A';
     document.getElementById('previewSpan').innerText = 'Active Flight Zone';
     document.getElementById('previewDate').innerText = new Date().toLocaleString();
@@ -224,11 +293,11 @@ async function saveBridgeRemarks() {
         if(response.ok) {
             btn.innerText = "✅ Saved Successfully!";
             fetchDatabaseStats(); 
-            setTimeout(() => { btn.innerText = "💾 SAVE REMARKS"; }, 2000);
+            setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
         }
     } catch (e) {
         console.error("Save failed", e);
-        btn.innerText = "💾 SAVE REMARKS";
+        btn.innerText = "💾 Save Remarks";
     }
 }
 
@@ -397,7 +466,7 @@ function showBridgeDetails(bridge) {
         card.className = 'mission-card';
         card.onclick = () => showMissionDetails(mId);
         card.innerHTML = `
-            <div><div class="mission-card-title">${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
+            <div><div class="mission-card-title">🚁 ${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
             <div class="mission-card-stats">${mImgs.length} Images</div>
         `;
         missionGrid.appendChild(card);
@@ -419,13 +488,23 @@ function showMissionDetails(missionId) {
 
     const actionContainer = document.getElementById('missionActionContainer');
     const chartContainer = document.getElementById('defectChartContainer');
+    const deleteControls = document.getElementById('deleteControls');
     
+    // FIXED: Only show the delete controls if the mission is waiting for AI analysis
     if (missionStatus === 'Awaiting Analysis' || missionStatus === 'Processing') {
         actionContainer.style.display = 'block';
         chartContainer.style.display = 'none';
+        
+        // Show delete option but make sure it resets
+        deleteControls.style.display = 'flex';
+        cancelDeleteMode();
     } else {
         actionContainer.style.display = 'none';
         chartContainer.style.display = 'block';
+        
+        // Hide completely if analysis is already done
+        deleteControls.style.display = 'none';
+        isDeleteMode = false;
     }
 
     const allImages = currentActiveBridge.images || [];
@@ -470,6 +549,10 @@ function showMissionDetails(missionId) {
 
 async function startAiAnalysis() {
     if (!currentActiveMission) return;
+    
+    // Safety check: close delete mode if it's open
+    cancelDeleteMode();
+    document.getElementById('deleteControls').style.display = 'none';
     
     const btn = document.getElementById('runAiBtn');
     const progressContainer = document.getElementById('analysisProgressBarContainer');
@@ -621,7 +704,6 @@ function buildGalleryGrid(imageArray, container) {
             
             const dateStr = img.date || img.created_at || img.captured_at ? new Date(img.date || img.created_at || img.captured_at).toLocaleString() : 'Recent Capture';
             
-            // NEW: Push the confidence into the metadata array for the modal
             window.imageMetaData[img.id] = {
                 url: imgSrc,
                 type: defectType,
@@ -634,10 +716,19 @@ function buildGalleryGrid(imageArray, container) {
 
             const card = document.createElement('div');
             card.className = 'gallery-card';
+            // NEW: ID applied to the card wrapper so we can modify its CSS dynamically
+            card.id = `gallery-card-${img.id}`; 
+            
+            // NEW: The click event is now handled by the custom function 
+            card.onclick = (e) => {
+                e.stopPropagation();
+                handleGalleryClick(e, img.id);
+            };
+
             card.innerHTML = `
                 <div style="position: relative;">
                     ${topBadge}
-                    <img src="${imgSrc}" class="gallery-img" alt="Capture" onclick="openImagePreview(${img.id})">
+                    <img src="${imgSrc}" class="gallery-img" alt="Capture">
                 </div>
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;">${typeHtml}</p>

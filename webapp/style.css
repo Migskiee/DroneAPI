@@ -82,8 +82,21 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 }
 .gallery-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: transform 0.2s; cursor: pointer; }
 .gallery-card:hover { transform: translateY(-2px); box-shadow: 0 8px 12px -3px rgba(0,0,0,0.1); border-color:#3b82f6; }
-.gallery-img { width: 100%; height: 160px; object-fit: cover; background-color: #0f172a; }
-.gallery-info { padding: 15px; }
+
+/* NEW: Styles for the "Delete Mode" Selection */
+.gallery-card.selected-for-delete {
+    border: 3px solid #ef4444;
+    background-color: #fee2e2;
+    transform: scale(0.95);
+    opacity: 0.85;
+    box-shadow: inset 0 0 0 2px #ef4444;
+}
+.gallery-card.selected-for-delete .gallery-info {
+    background-color: #fee2e2;
+}
+
+.gallery-img { width: 100%; height: 160px; object-fit: cover; background-color: #0f172a; pointer-events: none; }
+.gallery-info { padding: 15px; transition: background-color 0.2s; pointer-events: none;}
 .gallery-info p { margin-bottom: 5px; font-size: 13px; color: #334155; }
 .crud-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; }
 .gallery-filters { display: flex; gap: 15px; }
@@ -142,7 +155,6 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 .live-capture-card img { width: 100%; height: 85px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0; }
 .live-capture-info { padding: 6px; font-size: 11px; font-weight: bold; text-align: center; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
 
-/* NEW: Professional Split-Layout Image Modal */
 #imagePreviewModal {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(15, 23, 42, 0.9); z-index: 10000;
