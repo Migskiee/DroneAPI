@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // NEW: Load AI settings from browser LocalStorage
     const savedConf = localStorage.getItem('aiConfThreshold') || '50';
     const savedSize = localStorage.getItem('aiImgSize') || '640';
     
@@ -79,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
-// NEW: Function to permanently save settings to the browser
 function saveAiSettings() {
     const confVal = document.getElementById('aiConfSlider').value;
     const sizeVal = document.getElementById('aiImgSizeSelect').value;
@@ -89,11 +87,11 @@ function saveAiSettings() {
     
     const btn = document.getElementById('saveSettingsBtn');
     btn.innerText = "✅ Configuration Saved!";
-    btn.style.background = "#059669"; // Slightly darker green to show click
+    btn.style.background = "#059669";
     
     setTimeout(() => {
         btn.innerText = "💾 Save Configuration";
-        btn.style.background = "#10b981"; // Revert to standard green
+        btn.style.background = "#10b981";
     }, 2000);
 }
 
@@ -402,114 +400,6 @@ function showBridgeList() {
     document.getElementById('missionDetailView').style.display = 'none';
 }
 
-function showBridgeDetails(bridge) {
-    currentActiveBridge = bridge; currentActiveMission = null;
-    document.getElementById('bridgeListView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'none';
-    document.getElementById('bridgeDetailView').style.display = 'block';
-
-    document.getElementById('detailName').innerText = bridge.name;
-    document.getElementById('detailLocation').innerText = bridge.location;
-    document.getElementById('detailId').innerText = bridge.id;
-
-    let bridgeHealth = getBridgeHealth(bridge); 
-
-    const badge = document.getElementById('bridgeConditionBadge');
-    if (bridgeHealth === 'Bad') {
-        badge.className = 'status-badge status-bad';
-        badge.innerHTML = '🚨 Condition: BAD (Critical)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "CRITICAL CONDITION: Major structural anomalies detected.";
-    } else if (bridgeHealth === 'Poor') {
-        badge.className = 'status-badge status-poor';
-        badge.innerHTML = '⚠️ Condition: POOR (Monitor)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "MODERATE DETERIORATION: Continue monitoring required.";
-    } else {
-        badge.className = 'status-badge status-fair';
-        badge.innerHTML = '✅ Condition: FAIR (Safe)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
-    }
-
-    let latestMissionIdLabel = 'Unknown';
-    let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
-    
-    if (bridge.missions && bridge.missions.length > 0) {
-        const latestMissionId = bridge.missions[0].id;
-        latestMissionIdLabel = latestMissionId;
-        const latestImages = (bridge.images || []).filter(img => img.mission_id === latestMissionId);
-        
-        latestImages.forEach(img => {
-            let severity = img.severity || 'Fair';
-            if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
-            else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
-            else if (severity !== 'Pending') severityCounts['Fair']++; 
-        });
-    }
-
-    const descElement = document.getElementById('latestMissionChartDesc');
-    if(descElement) descElement.innerText = (bridge.missions && bridge.missions.length > 0) ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
-
-    let labels = [], chartData = [], colors = [];
-    for (const [sev, count] of Object.entries(severityCounts)) {
-        if(count > 0) {
-            labels.push(sev); chartData.push(count);
-            if (sev === 'Bad') colors.push('#ef4444');
-            else if (sev === 'Fair') colors.push('#10b981');
-            else colors.push('#f59e0b'); 
-        }
-    }
-
-    const ctx = document.getElementById('defectChart').getContext('2d');
-    if (detailChartInstance) detailChartInstance.destroy();
-    detailChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-    });
-
-    const missionGrid = document.getElementById('missionListGrid');
-    missionGrid.innerHTML = '';
-    
-    if (!bridge.missions || bridge.missions.length === 0) {
-        missionGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No flight missions logged for this bridge yet.</p>';
-        return;
-    }
-
-    const groupedByMission = {};
-    (bridge.images || []).forEach(img => {
-        const mId = img.mission_id || 'Unassigned';
-        if (!groupedByMission[mId]) groupedByMission[mId] = [];
-        groupedByMission[mId].push(img);
-    });
-
-    bridge.missions.forEach(mission => {
-        const mId = mission.id;
-        const mImgs = groupedByMission[mId] || [];
-        const label = `Mission #${mId}`;
-        
-        const urgentCount = mImgs.filter(i => i.severity === 'Bad' || i.severity === 'Critical' || i.severity === 'High').length;
-        let urgentBadge = '';
-        
-        if (mission.status === 'Awaiting Analysis') {
-            urgentBadge = `<span style="color:#8b5cf6; font-size:12px; display:block; margin-top:3px;">🧠 Raw Data Ready for AI</span>`;
-        } else if (urgentCount > 0) {
-            urgentBadge = `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>`;
-        } else if (mImgs.length === 0) {
-            urgentBadge = `<span style="color:#10b981; font-size:12px; display:block; margin-top:3px;">✅ No Defects Detected</span>`;
-        }
-
-        const card = document.createElement('div');
-        card.className = 'mission-card';
-        card.onclick = () => showMissionDetails(mId);
-        card.innerHTML = `
-            <div><div class="mission-card-title">${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
-            <div class="mission-card-stats">${mImgs.length} Images</div>
-        `;
-        missionGrid.appendChild(card);
-    });
-}
-
-function backToBridgeDetails() { if(currentActiveBridge) showBridgeDetails(currentActiveBridge); }
-
 function showMissionDetails(missionId) {
     currentActiveMission = missionId;
     document.getElementById('bridgeDetailView').style.display = 'none';
@@ -525,18 +415,32 @@ function showMissionDetails(missionId) {
     const chartContainer = document.getElementById('defectChartContainer');
     const deleteControls = document.getElementById('deleteControls');
     
+    const aiTitle = document.getElementById('aiActionTitle');
+    const aiDesc = document.getElementById('aiActionDesc');
+    const aiBtn = document.getElementById('runAiBtn');
+
+    // FIXED: The action container is now always permanently visible
+    actionContainer.style.display = 'block';
+
+    // FIXED: Dynamically alter the UI based on if it's the first run or a Re-Scan
     if (missionStatus === 'Awaiting Analysis' || missionStatus === 'Processing') {
-        actionContainer.style.display = 'block';
         chartContainer.style.display = 'none';
-        
         deleteControls.style.display = 'flex';
         cancelDeleteMode();
-    } else {
-        actionContainer.style.display = 'none';
-        chartContainer.style.display = 'block';
         
+        aiTitle.innerText = "Data Ready for Analysis";
+        aiDesc.innerHTML = "Raw images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO AI.";
+        aiBtn.innerHTML = "🧠 RUN AI ANALYSIS";
+        aiBtn.style.background = "#8b5cf6";
+    } else {
+        chartContainer.style.display = 'block';
         deleteControls.style.display = 'none';
         isDeleteMode = false;
+        
+        aiTitle.innerText = "Re-Run AI Analysis";
+        aiDesc.innerHTML = "Want to scan with different confidence or resolution? Update your <b>Settings</b> and re-scan this flight.";
+        aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
+        aiBtn.style.background = "#3b82f6"; // Blue color to signify it's a re-run
     }
 
     const allImages = currentActiveBridge.images || [];
@@ -590,7 +494,6 @@ async function startAiAnalysis() {
     const progressBar = document.getElementById('analysisProgressBar');
     const progressText = document.getElementById('analysisProgressText');
 
-    // NEW: Load the parameters dynamically from LocalStorage (or default if null)
     const savedConf = localStorage.getItem('aiConfThreshold') || '50';
     const savedSize = localStorage.getItem('aiImgSize') || '640';
     

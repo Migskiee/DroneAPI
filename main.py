@@ -37,6 +37,12 @@ try:
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS span_count INTEGER DEFAULT 1;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS defect_size VARCHAR(50) DEFAULT 'N/A';")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS confidence_score VARCHAR(20) DEFAULT 'N/A';")
+    
+    # NEW: Create a column to permanently store the untouched original image
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS raw_image_url TEXT;")
+    # Backfill the raw URL for any existing images in your database
+    cursor.execute("UPDATE captured_images SET raw_image_url = image_url WHERE raw_image_url IS NULL AND defect_type = 'Raw Image';")
+    
     conn.commit()
     cursor.close()
     conn.close()
@@ -61,7 +67,7 @@ class AnalyzeParams(BaseModel):
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 try:
-    model = YOLO('AIModel/AIModelFinalV3.pt')
+    model = YOLO('AIModel/AIModelFinalV2.pt')
     print("YOLO Model Loaded Successfully!")
 except Exception as e:
     print(f"Warning: YOLO Model not found or failed to load. {e}")
@@ -107,10 +113,11 @@ def upload_raw_worker(mission_id, span_target):
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
                 
+                # FIXED: Saving the secure_url into BOTH the live image slot and the raw fallback slot
                 cursor.execute("""
-                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score)
-                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A')
-                """, (mission_id, span_target, secure_url))
+                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url)
+                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s)
+                """, (mission_id, span_target, secure_url, secure_url))
                 conn.commit()
             except Exception as e:
                 print(f"❌ Upload failed for {file}: {e}")
@@ -139,7 +146,8 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
         
-        cursor.execute("SELECT id, image_url, span_target FROM captured_images WHERE mission_id = %s", (mission_id,))
+        # FIXED: Always fetch the pristine raw image (falling back to image_url for older data just in case)
+        cursor.execute("SELECT id, COALESCE(raw_image_url, image_url), span_target FROM captured_images WHERE mission_id = %s", (mission_id,))
         raw_images = cursor.fetchall()
         
         total_files = len(raw_images)
@@ -225,7 +233,12 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
                             if os.path.exists(tmp_path): os.remove(tmp_path)
                             
                 if not has_new_defect:
-                    cursor.execute("UPDATE captured_images SET severity_level = 'Fair', confidence_score = 'N/A' WHERE id = %s", (img_id,))
+                    # FIXED: If a re-scan finds NO defects, completely revert the database row to raw status
+                    cursor.execute("""
+                        UPDATE captured_images 
+                        SET image_url = COALESCE(raw_image_url, image_url), defect_type = 'Raw Image', severity_level = 'Fair', defect_size = 'N/A', confidence_score = 'N/A' 
+                        WHERE id = %s
+                    """, (img_id,))
                     conn.commit()
                     
             except Exception as e:
@@ -388,7 +401,6 @@ def get_bridge_data():
         cursor.execute("SELECT COUNT(*) FROM bridges")
         total_bridges = cursor.fetchone()[0]
         
-        # Calculate true bounding box instances using the piped confidence strings
         cursor.execute("SELECT confidence_score FROM captured_images WHERE defect_type != 'Raw Image' AND confidence_score != 'N/A'")
         all_confs = cursor.fetchall()
         
