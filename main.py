@@ -37,12 +37,8 @@ try:
     cursor.execute("ALTER TABLE bridges ADD COLUMN IF NOT EXISTS span_count INTEGER DEFAULT 1;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS defect_size VARCHAR(50) DEFAULT 'N/A';")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS confidence_score VARCHAR(20) DEFAULT 'N/A';")
-    
-    # NEW: Create a column to permanently store the untouched original image
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS raw_image_url TEXT;")
-    # Backfill the raw URL for any existing images in your database
     cursor.execute("UPDATE captured_images SET raw_image_url = image_url WHERE raw_image_url IS NULL AND defect_type = 'Raw Image';")
-    
     conn.commit()
     cursor.close()
     conn.close()
@@ -113,7 +109,6 @@ def upload_raw_worker(mission_id, span_target):
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
                 
-                # FIXED: Saving the secure_url into BOTH the live image slot and the raw fallback slot
                 cursor.execute("""
                     INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url)
                     VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s)
@@ -146,7 +141,6 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
         
-        # FIXED: Always fetch the pristine raw image (falling back to image_url for older data just in case)
         cursor.execute("SELECT id, COALESCE(raw_image_url, image_url), span_target FROM captured_images WHERE mission_id = %s", (mission_id,))
         raw_images = cursor.fetchall()
         
@@ -233,7 +227,6 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
                             if os.path.exists(tmp_path): os.remove(tmp_path)
                             
                 if not has_new_defect:
-                    # FIXED: If a re-scan finds NO defects, completely revert the database row to raw status
                     cursor.execute("""
                         UPDATE captured_images 
                         SET image_url = COALESCE(raw_image_url, image_url), defect_type = 'Raw Image', severity_level = 'Fair', defect_size = 'N/A', confidence_score = 'N/A' 
@@ -400,17 +393,6 @@ def get_bridge_data():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM bridges")
         total_bridges = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT confidence_score FROM captured_images WHERE defect_type != 'Raw Image' AND confidence_score != 'N/A'")
-        all_confs = cursor.fetchall()
-        
-        total_bounding_boxes = 0
-        for conf_row in all_confs:
-            conf_string = conf_row[0]
-            if conf_string:
-                total_bounding_boxes += conf_string.count('|') + 1
-                
-        total_defects = total_bounding_boxes
 
         cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images WHERE defect_type != 'Raw Image' GROUP BY severity_level")
         severity_data = cursor.fetchall()
@@ -433,7 +415,7 @@ def get_bridge_data():
             bridge_list.append({"db_id": bridge_id, "id": b[1], "name": b[2], "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery, "missions": bridge_missions})
 
         cursor.close(); conn.close()
-        return {"status": "success", "stats": {"total_bridges": total_bridges, "total_defects": total_defects, "severity": severity_data}, "bridges": bridge_list}
+        return {"status": "success", "stats": {"total_bridges": total_bridges, "severity": severity_data}, "bridges": bridge_list}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/bridges")
@@ -466,6 +448,22 @@ def update_bridge_remarks(bridge_id: int, update_data: RemarkUpdate):
         conn.commit(); cursor.close(); conn.close()
         return {"status": "success"}
     except: raise HTTPException(status_code=500)
+
+# NEW: Safely delete a bridge and all its data
+@app.delete("/api/bridges/{bridge_id}")
+def delete_bridge(bridge_id: int):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM captured_images WHERE mission_id IN (SELECT id FROM inspection_missions WHERE bridge_id = %s)", (bridge_id,))
+        cursor.execute("DELETE FROM inspection_missions WHERE bridge_id = %s", (bridge_id,))
+        cursor.execute("DELETE FROM bridges WHERE id = %s", (bridge_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success"}
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/images/bulk-delete")
 def bulk_delete_images(params: BulkDeleteParams):

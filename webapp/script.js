@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
             sections.forEach(section => section.style.display = 'none');
             document.getElementById(targetId).style.display = 'block';
             
-            // Ensures returning to Bridge Database resets the view perfectly
             if (targetId === 'bridges') {
                 showBridgeList();
             }
@@ -83,22 +82,34 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDatabaseStats();
 });
 
-// ==========================================
-// IRONCLAD GLOBAL CLICK HANDLERS
-// ==========================================
 window.openBridgeView = function(db_id) {
-    console.log("Opening bridge DB ID:", db_id);
     const bridge = liveBridgeData.find(b => b.db_id === db_id);
     if(bridge) {
         showBridgeDetails(bridge);
-    } else {
-        console.error("Bridge not found in live data!");
     }
 };
 
 window.openMissionView = function(mission_id) {
-    console.log("Opening mission ID:", mission_id);
     showMissionDetails(mission_id);
+};
+
+// FIXED: Database level Delete Bridge function
+window.deleteBridge = async function(db_id) {
+    if (!confirm("⚠️ WARNING: Are you sure you want to permanently delete this bridge and all of its associated flight missions and images? This action cannot be undone.")) return;
+
+    try {
+        const res = await fetch(`/api/bridges/${db_id}`, { method: 'DELETE' });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            fetchDatabaseStats(); 
+        } else {
+            alert('Failed to delete bridge from database.');
+        }
+    } catch (error) { 
+        console.error("Network Error:", error); 
+        alert("Error securely connecting to backend for deletion.");
+    }
 };
 
 function saveAiSettings() {
@@ -245,6 +256,8 @@ async function fetchDatabaseStats() {
                     } else {
                         showBridgeDetails(refreshedBridge);
                     }
+                } else {
+                    showBridgeList();
                 }
             }
         }
@@ -358,8 +371,8 @@ async function saveBridgeRemarks() {
 }
 
 function renderAnalytics(stats) {
+    // FIXED: Stripped total defects logic
     document.getElementById('totalBridgesValue').innerText = stats.total_bridges;
-    document.getElementById('totalDefectsValue').innerText = stats.total_defects;
 
     let healthCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
 
@@ -401,7 +414,6 @@ function renderBridges(bridges) {
 
         const card = document.createElement('div');
         card.className = 'bridge-card';
-        // FIXED: Using a global string execution guarantees the click will fire
         card.setAttribute('onclick', `openBridgeView(${bridge.db_id})`);
         
         card.innerHTML = `
@@ -413,6 +425,7 @@ function renderBridges(bridges) {
                 <span class="bridge-id">${bridge.id}</span>
                 <button class="btn btn-primary" onclick="event.stopPropagation(); openBridgeView(${bridge.db_id})" style="padding: 6px 12px; margin: 0; font-size: 13px; background: #3b82f6; border: none;">👁️ View</button>
                 <button class="btn-edit" onclick="event.stopPropagation(); openBridgeModal(${bridge.db_id})">✏️ Edit</button>
+                <button class="btn-edit" onclick="event.stopPropagation(); deleteBridge(${bridge.db_id})" style="color: #ef4444; border-color: #fca5a5;">🗑️ Delete</button>
             </div>
         `;
         bridgeGrid.appendChild(card);
@@ -523,7 +536,6 @@ function showBridgeDetails(bridge) {
 
         const card = document.createElement('div');
         card.className = 'mission-card';
-        // FIXED: Ironclad onclick for mission cards
         card.setAttribute('onclick', `openMissionView(${mId})`);
         card.innerHTML = `
             <div><div class="mission-card-title">${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
