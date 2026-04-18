@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sections.forEach(section => section.style.display = 'none');
             document.getElementById(targetId).style.display = 'block';
             
-            // FIXED: If you click Bridge Database in the sidebar, always force it to reset to the list grid.
+            // Ensures returning to Bridge Database resets the view perfectly
             if (targetId === 'bridges') {
                 showBridgeList();
             }
@@ -70,9 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (confSlider) {
         confSlider.value = savedConf;
-        confDisplay.innerText = savedConf + '%';
+        if(confDisplay) confDisplay.innerText = savedConf + '%';
         confSlider.addEventListener('input', (e) => {
-            confDisplay.innerText = e.target.value + '%';
+            if(confDisplay) confDisplay.innerText = e.target.value + '%';
         });
     }
     
@@ -82,6 +82,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fetchDatabaseStats();
 });
+
+// ==========================================
+// IRONCLAD GLOBAL CLICK HANDLERS
+// ==========================================
+window.openBridgeView = function(db_id) {
+    console.log("Opening bridge DB ID:", db_id);
+    const bridge = liveBridgeData.find(b => b.db_id === db_id);
+    if(bridge) {
+        showBridgeDetails(bridge);
+    } else {
+        console.error("Bridge not found in live data!");
+    }
+};
+
+window.openMissionView = function(mission_id) {
+    console.log("Opening mission ID:", mission_id);
+    showMissionDetails(mission_id);
+};
 
 function saveAiSettings() {
     const confVal = document.getElementById('aiConfSlider').value;
@@ -383,8 +401,9 @@ function renderBridges(bridges) {
 
         const card = document.createElement('div');
         card.className = 'bridge-card';
-        // The whole card is clickable
-        card.onclick = () => showBridgeDetails(bridge);
+        // FIXED: Using a global string execution guarantees the click will fire
+        card.setAttribute('onclick', `openBridgeView(${bridge.db_id})`);
+        
         card.innerHTML = `
             <div class="bridge-info">
                 <h3>${bridge.name} <span class="health-badge ${badgeClass}">${badgeText}</span></h3>
@@ -392,7 +411,7 @@ function renderBridges(bridges) {
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span class="bridge-id">${bridge.id}</span>
-                <button class="btn btn-primary" style="padding: 6px 12px; margin: 0; font-size: 13px; background: #3b82f6; border: none;">👁️ View</button>
+                <button class="btn btn-primary" onclick="event.stopPropagation(); openBridgeView(${bridge.db_id})" style="padding: 6px 12px; margin: 0; font-size: 13px; background: #3b82f6; border: none;">👁️ View</button>
                 <button class="btn-edit" onclick="event.stopPropagation(); openBridgeModal(${bridge.db_id})">✏️ Edit</button>
             </div>
         `;
@@ -406,6 +425,115 @@ function showBridgeList() {
     document.getElementById('bridgeDetailView').style.display = 'none';
     document.getElementById('missionDetailView').style.display = 'none';
 }
+
+function showBridgeDetails(bridge) {
+    currentActiveBridge = bridge; currentActiveMission = null;
+    document.getElementById('bridgeListView').style.display = 'none';
+    document.getElementById('missionDetailView').style.display = 'none';
+    document.getElementById('bridgeDetailView').style.display = 'block';
+
+    document.getElementById('detailName').innerText = bridge.name;
+    document.getElementById('detailLocation').innerText = bridge.location;
+    document.getElementById('detailId').innerText = bridge.id;
+
+    let bridgeHealth = getBridgeHealth(bridge); 
+
+    const badge = document.getElementById('bridgeConditionBadge');
+    if (bridgeHealth === 'Bad') {
+        badge.className = 'status-badge status-bad';
+        badge.innerHTML = '🚨 Condition: BAD (Critical)';
+        document.getElementById('bridgeRemarks').value = bridge.remarks || "CRITICAL CONDITION: Major structural anomalies detected.";
+    } else if (bridgeHealth === 'Poor') {
+        badge.className = 'status-badge status-poor';
+        badge.innerHTML = '⚠️ Condition: POOR (Monitor)';
+        document.getElementById('bridgeRemarks').value = bridge.remarks || "MODERATE DETERIORATION: Continue monitoring required.";
+    } else {
+        badge.className = 'status-badge status-fair';
+        badge.innerHTML = '✅ Condition: FAIR (Safe)';
+        document.getElementById('bridgeRemarks').value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
+    }
+
+    let latestMissionIdLabel = 'Unknown';
+    let severityCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
+    
+    if (bridge.missions && bridge.missions.length > 0) {
+        const latestMissionId = bridge.missions[0].id;
+        latestMissionIdLabel = latestMissionId;
+        const latestImages = (bridge.images || []).filter(img => img.mission_id === latestMissionId);
+        
+        latestImages.forEach(img => {
+            let severity = img.severity || 'Fair';
+            if (severity === 'Bad' || severity === 'Critical' || severity === 'High') severityCounts['Bad']++;
+            else if (severity === 'Poor' || severity === 'Review Needed') severityCounts['Poor']++;
+            else if (severity !== 'Pending') severityCounts['Fair']++; 
+        });
+    }
+
+    const descElement = document.getElementById('latestMissionChartDesc');
+    if(descElement) descElement.innerText = (bridge.missions && bridge.missions.length > 0) ? `Defect breakdown from the most recent flight (Mission #${latestMissionIdLabel}).` : `No flight data available.`;
+
+    let labels = [], chartData = [], colors = [];
+    for (const [sev, count] of Object.entries(severityCounts)) {
+        if(count > 0) {
+            labels.push(sev); chartData.push(count);
+            if (sev === 'Bad') colors.push('#ef4444');
+            else if (sev === 'Fair') colors.push('#10b981');
+            else colors.push('#f59e0b'); 
+        }
+    }
+
+    const ctx = document.getElementById('defectChart').getContext('2d');
+    if (detailChartInstance) detailChartInstance.destroy();
+    detailChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    const missionGrid = document.getElementById('missionListGrid');
+    missionGrid.innerHTML = '';
+    
+    if (!bridge.missions || bridge.missions.length === 0) {
+        missionGrid.innerHTML = '<p class="text-muted" style="grid-column: 1 / -1;">No flight missions logged for this bridge yet.</p>';
+        return;
+    }
+
+    const groupedByMission = {};
+    (bridge.images || []).forEach(img => {
+        const mId = img.mission_id || 'Unassigned';
+        if (!groupedByMission[mId]) groupedByMission[mId] = [];
+        groupedByMission[mId].push(img);
+    });
+
+    bridge.missions.forEach(mission => {
+        const mId = mission.id;
+        const mImgs = groupedByMission[mId] || [];
+        const label = `Mission #${mId}`;
+        
+        const urgentCount = mImgs.filter(i => i.severity === 'Bad' || i.severity === 'Critical' || i.severity === 'High').length;
+        let urgentBadge = '';
+        
+        if (mission.status === 'Awaiting Analysis') {
+            urgentBadge = `<span style="color:#8b5cf6; font-size:12px; display:block; margin-top:3px;">🧠 Raw Data Ready for AI</span>`;
+        } else if (urgentCount > 0) {
+            urgentBadge = `<span style="color:#ef4444; font-size:12px; display:block; margin-top:3px;">⚠️ ${urgentCount} Bad Condition Issues</span>`;
+        } else if (mImgs.length === 0) {
+            urgentBadge = `<span style="color:#10b981; font-size:12px; display:block; margin-top:3px;">✅ No Defects Detected</span>`;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'mission-card';
+        // FIXED: Ironclad onclick for mission cards
+        card.setAttribute('onclick', `openMissionView(${mId})`);
+        card.innerHTML = `
+            <div><div class="mission-card-title">${label}</div><div class="mission-card-subtitle">Status: ${mission.status}</div>${urgentBadge}</div>
+            <div class="mission-card-stats">${mImgs.length} Images</div>
+        `;
+        missionGrid.appendChild(card);
+    });
+}
+
+function backToBridgeDetails() { if(currentActiveBridge) showBridgeDetails(currentActiveBridge); }
 
 function showMissionDetails(missionId) {
     currentActiveMission = missionId;
@@ -426,10 +554,8 @@ function showMissionDetails(missionId) {
     const aiDesc = document.getElementById('aiActionDesc');
     const aiBtn = document.getElementById('runAiBtn');
 
-    // Make sure the action box is displayed
     if(actionContainer) actionContainer.style.display = 'block';
 
-    // Safely apply JS updates using null-checks
     if (missionStatus === 'Awaiting Analysis' || missionStatus === 'Processing') {
         if(chartContainer) chartContainer.style.display = 'none';
         if(deleteControls) deleteControls.style.display = 'flex';
