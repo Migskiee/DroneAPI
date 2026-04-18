@@ -22,6 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
             sections.forEach(section => section.style.display = 'none');
             document.getElementById(targetId).style.display = 'block';
             
+            // FIXED: If you click Bridge Database in the sidebar, always force it to reset to the list grid.
+            if (targetId === 'bridges') {
+                showBridgeList();
+            }
+            
             navLinks.forEach(l => l.classList.remove('active'));
             this.classList.add('active');
         });
@@ -378,14 +383,16 @@ function renderBridges(bridges) {
 
         const card = document.createElement('div');
         card.className = 'bridge-card';
+        // The whole card is clickable
         card.onclick = () => showBridgeDetails(bridge);
         card.innerHTML = `
             <div class="bridge-info">
                 <h3>${bridge.name} <span class="health-badge ${badgeClass}">${badgeText}</span></h3>
                 <p>${bridge.location}</p>
             </div>
-            <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
                 <span class="bridge-id">${bridge.id}</span>
+                <button class="btn btn-primary" style="padding: 6px 12px; margin: 0; font-size: 13px; background: #3b82f6; border: none;">👁️ View</button>
                 <button class="btn-edit" onclick="event.stopPropagation(); openBridgeModal(${bridge.db_id})">✏️ Edit</button>
             </div>
         `;
@@ -419,28 +426,32 @@ function showMissionDetails(missionId) {
     const aiDesc = document.getElementById('aiActionDesc');
     const aiBtn = document.getElementById('runAiBtn');
 
-    // FIXED: The action container is now always permanently visible
-    actionContainer.style.display = 'block';
+    // Make sure the action box is displayed
+    if(actionContainer) actionContainer.style.display = 'block';
 
-    // FIXED: Dynamically alter the UI based on if it's the first run or a Re-Scan
+    // Safely apply JS updates using null-checks
     if (missionStatus === 'Awaiting Analysis' || missionStatus === 'Processing') {
-        chartContainer.style.display = 'none';
-        deleteControls.style.display = 'flex';
+        if(chartContainer) chartContainer.style.display = 'none';
+        if(deleteControls) deleteControls.style.display = 'flex';
         cancelDeleteMode();
         
-        aiTitle.innerText = "Data Ready for Analysis";
-        aiDesc.innerHTML = "Raw images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO AI.";
-        aiBtn.innerHTML = "🧠 RUN AI ANALYSIS";
-        aiBtn.style.background = "#8b5cf6";
+        if(aiTitle) aiTitle.innerText = "Data Ready for Analysis";
+        if(aiDesc) aiDesc.innerHTML = "Raw images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO AI.";
+        if(aiBtn) {
+            aiBtn.innerHTML = "🧠 RUN AI ANALYSIS";
+            aiBtn.style.background = "#8b5cf6";
+        }
     } else {
-        chartContainer.style.display = 'block';
-        deleteControls.style.display = 'none';
+        if(chartContainer) chartContainer.style.display = 'block';
+        if(deleteControls) deleteControls.style.display = 'none';
         isDeleteMode = false;
         
-        aiTitle.innerText = "Re-Run AI Analysis";
-        aiDesc.innerHTML = "Want to scan with different confidence or resolution? Update your <b>Settings</b> and re-scan this flight.";
-        aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
-        aiBtn.style.background = "#3b82f6"; // Blue color to signify it's a re-run
+        if(aiTitle) aiTitle.innerText = "Re-Run AI Analysis";
+        if(aiDesc) aiDesc.innerHTML = "Want to scan with different confidence or resolution? Update your <b>Settings</b> and re-scan this flight.";
+        if(aiBtn) {
+            aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
+            aiBtn.style.background = "#3b82f6"; 
+        }
     }
 
     const allImages = currentActiveBridge.images || [];
