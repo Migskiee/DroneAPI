@@ -31,34 +31,44 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('bridgeSearch').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const filtered = liveBridgeData.filter(bridge => 
-            bridge.name.toLowerCase().includes(term) || bridge.location.toLowerCase().includes(term)
-        );
-        renderBridges(filtered);
-    });
+    const searchInput = document.getElementById('bridgeSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = liveBridgeData.filter(bridge => 
+                bridge.name.toLowerCase().includes(term) || bridge.location.toLowerCase().includes(term)
+            );
+            renderBridges(filtered);
+        });
+    }
 
-    document.getElementById('flightBridgeSelect').addEventListener('change', function() {
-        const db_id = parseInt(this.value);
-        const bridge = liveBridgeData.find(b => b.db_id === db_id);
-        const container = document.getElementById('dynamicSpanContainer');
-        container.innerHTML = '';
-        
-        if(bridge && bridge.span_count > 0) {
-            for(let i = 1; i <= bridge.span_count; i++) {
-                const btn = document.createElement('button');
-                btn.className = `span-btn ${i === 1 ? 'active' : ''}`;
-                btn.innerText = `Span ${i}`;
-                btn.onclick = function() { setFlightSpan(`Span ${i}`, this); };
-                container.appendChild(btn);
+    const bridgeSelect = document.getElementById('flightBridgeSelect');
+    if (bridgeSelect) {
+        bridgeSelect.addEventListener('change', function() {
+            const db_id = parseInt(this.value);
+            const bridge = liveBridgeData.find(b => b.db_id === db_id);
+            const container = document.getElementById('dynamicSpanContainer');
+            if(!container) return;
+
+            container.innerHTML = '';
+            
+            if(bridge && bridge.span_count > 0) {
+                for(let i = 1; i <= bridge.span_count; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = `span-btn ${i === 1 ? 'active' : ''}`;
+                    btn.innerText = `Span ${i}`;
+                    btn.onclick = function() { setFlightSpan(`Span ${i}`, this); };
+                    container.appendChild(btn);
+                }
+                const spanInput = document.getElementById('flightSpanInput');
+                if(spanInput) spanInput.value = 'Span 1';
+            } else {
+                container.innerHTML = '<p class="text-muted" style="font-size: 12px; margin-top: 5px;">No spans configured.</p>';
+                const spanInput = document.getElementById('flightSpanInput');
+                if(spanInput) spanInput.value = '';
             }
-            document.getElementById('flightSpanInput').value = 'Span 1';
-        } else {
-            container.innerHTML = '<p class="text-muted" style="font-size: 12px; margin-top: 5px;">No spans configured.</p>';
-            document.getElementById('flightSpanInput').value = '';
-        }
-    });
+        });
+    }
 
     const savedConf = localStorage.getItem('aiConfThreshold') || '50';
     const savedSize = localStorage.getItem('aiImgSize') || '640';
@@ -93,7 +103,6 @@ window.openMissionView = function(mission_id) {
     showMissionDetails(mission_id);
 };
 
-// FIXED: Database level Delete Bridge function
 window.deleteBridge = async function(db_id) {
     if (!confirm("⚠️ WARNING: Are you sure you want to permanently delete this bridge and all of its associated flight missions and images? This action cannot be undone.")) return;
 
@@ -112,68 +121,80 @@ window.deleteBridge = async function(db_id) {
     }
 };
 
-function saveAiSettings() {
-    const confVal = document.getElementById('aiConfSlider').value;
-    const sizeVal = document.getElementById('aiImgSizeSelect').value;
+window.saveAiSettings = function() {
+    const confSlider = document.getElementById('aiConfSlider');
+    const sizeSelect = document.getElementById('aiImgSizeSelect');
     
-    localStorage.setItem('aiConfThreshold', confVal);
-    localStorage.setItem('aiImgSize', sizeVal);
-    
-    const btn = document.getElementById('saveSettingsBtn');
-    btn.innerText = "✅ Configuration Saved!";
-    btn.style.background = "#059669";
-    
-    setTimeout(() => {
-        btn.innerText = "💾 Save Configuration";
-        btn.style.background = "#10b981";
-    }, 2000);
-}
+    if(confSlider && sizeSelect) {
+        localStorage.setItem('aiConfThreshold', confSlider.value);
+        localStorage.setItem('aiImgSize', sizeSelect.value);
+        
+        const btn = document.getElementById('saveSettingsBtn');
+        if(btn) {
+            btn.innerText = "✅ Configuration Saved!";
+            btn.style.background = "#059669";
+            setTimeout(() => {
+                btn.innerText = "💾 Save Configuration";
+                btn.style.background = "#10b981";
+            }, 2000);
+        }
+    }
+};
 
 function handleGalleryClick(event, imgId) {
     if (isDeleteMode) {
         const card = document.getElementById(`gallery-card-${imgId}`);
-        if (selectedForDelete.has(imgId)) {
-            selectedForDelete.delete(imgId);
-            card.classList.remove('selected-for-delete');
-        } else {
-            selectedForDelete.add(imgId);
-            card.classList.add('selected-for-delete');
+        if(card) {
+            if (selectedForDelete.has(imgId)) {
+                selectedForDelete.delete(imgId);
+                card.classList.remove('selected-for-delete');
+            } else {
+                selectedForDelete.add(imgId);
+                card.classList.add('selected-for-delete');
+            }
         }
-        document.getElementById('deleteCount').innerText = `${selectedForDelete.size} Selected`;
+        const delCount = document.getElementById('deleteCount');
+        if(delCount) delCount.innerText = `${selectedForDelete.size} Selected`;
     } else {
         openImagePreview(imgId);
     }
 }
 
-function toggleDeleteMode() {
+window.toggleDeleteMode = function() {
     isDeleteMode = true;
     selectedForDelete.clear();
-    document.getElementById('startDeleteBtn').style.display = 'none';
-    document.getElementById('activeDeleteControls').style.display = 'flex';
-    document.getElementById('deleteCount').innerText = '0 Selected';
-}
+    const sBtn = document.getElementById('startDeleteBtn');
+    const aCtrl = document.getElementById('activeDeleteControls');
+    const dCnt = document.getElementById('deleteCount');
+    
+    if(sBtn) sBtn.style.display = 'none';
+    if(aCtrl) aCtrl.style.display = 'flex';
+    if(dCnt) dCnt.innerText = '0 Selected';
+};
 
-function cancelDeleteMode() {
+window.cancelDeleteMode = function() {
     isDeleteMode = false;
     selectedForDelete.clear();
-    const btn = document.getElementById('startDeleteBtn');
-    if (btn) btn.style.display = 'block';
+    const sBtn = document.getElementById('startDeleteBtn');
+    const aCtrl = document.getElementById('activeDeleteControls');
     
-    const controls = document.getElementById('activeDeleteControls');
-    if (controls) controls.style.display = 'none';
+    if(sBtn) sBtn.style.display = 'block';
+    if(aCtrl) aCtrl.style.display = 'none';
     
     document.querySelectorAll('.gallery-card.selected-for-delete').forEach(card => {
         card.classList.remove('selected-for-delete');
     });
-}
+};
 
-async function confirmBulkDelete() {
+window.confirmBulkDelete = async function() {
     if (selectedForDelete.size === 0) return alert("Select at least one image to delete.");
     if (!confirm(`Are you sure you want to permanently delete ${selectedForDelete.size} image(s)? This action cannot be undone.`)) return;
 
     const btn = document.querySelector('#activeDeleteControls .btn-primary');
-    btn.innerText = "Deleting...";
-    btn.disabled = true;
+    if(btn) {
+        btn.innerText = "Deleting...";
+        btn.disabled = true;
+    }
 
     try {
         const res = await fetch('/api/images/bulk-delete', {
@@ -183,7 +204,7 @@ async function confirmBulkDelete() {
         });
         
         if (res.ok) {
-            cancelDeleteMode();
+            window.cancelDeleteMode();
             fetchDatabaseStats(); 
         } else {
             alert("Failed to delete images from database.");
@@ -192,49 +213,72 @@ async function confirmBulkDelete() {
         console.error("Delete error:", e);
         alert("Error deleting images.");
     } finally {
-        btn.innerText = "🗑️ Delete Selected";
-        btn.disabled = false;
+        if(btn) {
+            btn.innerText = "🗑️ Delete Selected";
+            btn.disabled = false;
+        }
     }
-}
+};
 
 function openImagePreview(imgId) {
     const data = window.imageMetaData ? window.imageMetaData[imgId] : null;
     if (!data) return;
 
-    document.getElementById('previewImageSrc').src = data.url;
-    document.getElementById('previewType').innerText = data.type;
-    document.getElementById('previewConfidence').innerText = data.confidence;
+    const pImg = document.getElementById('previewImageSrc');
+    const pType = document.getElementById('previewType');
+    const pConf = document.getElementById('previewConfidence');
+    const pSev = document.getElementById('previewSeverity');
+    const pSize = document.getElementById('previewSize');
+    const pSpan = document.getElementById('previewSpan');
+    const pDate = document.getElementById('previewDate');
+    const modal = document.getElementById('imagePreviewModal');
+
+    if(pImg) pImg.src = data.url;
+    if(pType) pType.innerText = data.type;
+    if(pConf) pConf.innerText = data.confidence;
     
     let sevClass = 'badge-fair';
     if(data.severity === 'Bad') sevClass = 'badge-bad';
     else if(data.severity === 'Poor') sevClass = 'badge-poor';
     else if(data.severity === 'Pending') sevClass = 'badge-pending';
 
-    document.getElementById('previewSeverity').innerHTML = `<span class="health-badge ${sevClass}" style="margin:0; font-size: 13px; padding: 6px 12px;">${data.severity.toUpperCase()}</span>`;
-    document.getElementById('previewSize').innerText = data.size;
-    document.getElementById('previewSpan').innerText = data.span;
-    document.getElementById('previewDate').innerText = data.date;
+    if(pSev) pSev.innerHTML = `<span class="health-badge ${sevClass}" style="margin:0; font-size: 13px; padding: 6px 12px;">${data.severity.toUpperCase()}</span>`;
+    if(pSize) pSize.innerText = data.size;
+    if(pSpan) pSpan.innerText = data.span;
+    if(pDate) pDate.innerText = data.date;
 
-    document.getElementById('imagePreviewModal').style.display = 'flex';
+    if(modal) modal.style.display = 'flex';
 }
 
-function openLivePreview(url) {
-    document.getElementById('previewImageSrc').src = url;
-    document.getElementById('previewType').innerText = 'Raw Unprocessed Frame';
-    document.getElementById('previewConfidence').innerText = 'N/A';
-    document.getElementById('previewSeverity').innerHTML = `<span class="health-badge badge-pending" style="margin:0; font-size: 13px; padding: 6px 12px;">AWAITING AI</span>`;
-    document.getElementById('previewSize').innerText = 'N/A';
-    document.getElementById('previewSpan').innerText = 'Active Flight Zone';
-    document.getElementById('previewDate').innerText = new Date().toLocaleString();
+window.openLivePreview = function(url) {
+    const pImg = document.getElementById('previewImageSrc');
+    const pType = document.getElementById('previewType');
+    const pConf = document.getElementById('previewConfidence');
+    const pSev = document.getElementById('previewSeverity');
+    const pSize = document.getElementById('previewSize');
+    const pSpan = document.getElementById('previewSpan');
+    const pDate = document.getElementById('previewDate');
+    const modal = document.getElementById('imagePreviewModal');
 
-    document.getElementById('imagePreviewModal').style.display = 'flex';
-}
+    if(pImg) pImg.src = url;
+    if(pType) pType.innerText = 'Raw Unprocessed Frame';
+    if(pConf) pConf.innerText = 'N/A';
+    if(pSev) pSev.innerHTML = `<span class="health-badge badge-pending" style="margin:0; font-size: 13px; padding: 6px 12px;">AWAITING AI</span>`;
+    if(pSize) pSize.innerText = 'N/A';
+    if(pSpan) pSpan.innerText = 'Active Flight Zone';
+    if(pDate) pDate.innerText = new Date().toLocaleString();
 
-function closeImagePreview(event) {
+    if(modal) modal.style.display = 'flex';
+};
+
+window.closeImagePreview = function(event) {
     if (event && event.target.id !== 'imagePreviewModal' && !event.target.classList.contains('close-preview')) return;
-    document.getElementById('imagePreviewModal').style.display = 'none';
-    document.getElementById('previewImageSrc').src = '';
-}
+    const modal = document.getElementById('imagePreviewModal');
+    const pImg = document.getElementById('previewImageSrc');
+    
+    if(modal) modal.style.display = 'none';
+    if(pImg) pImg.src = '';
+};
 
 async function fetchDatabaseStats() {
     try {
@@ -243,9 +287,10 @@ async function fetchDatabaseStats() {
 
         if (data.status === "success") {
             liveBridgeData = data.bridges;
-            renderAnalytics(data.stats);
-            renderBridges(liveBridgeData);
-            populateFlightDropdown();
+            
+            try { renderAnalytics(data.stats); } catch(e) { console.error("Analytics rendering bypassed.", e); }
+            try { renderBridges(liveBridgeData); } catch(e) { console.error("Bridge rendering bypassed.", e); }
+            try { populateFlightDropdown(); } catch(e) { console.error("Dropdown rendering bypassed.", e); }
             
             if(currentActiveBridge) {
                 const refreshedBridge = liveBridgeData.find(b => b.db_id === currentActiveBridge.db_id);
@@ -261,7 +306,9 @@ async function fetchDatabaseStats() {
                 }
             }
         }
-    } catch (error) { console.error("Failed to connect to backend:", error); }
+    } catch (error) { 
+        console.error("Failed to connect to backend:", error); 
+    }
 }
 
 function getBridgeHealth(bridge) {
@@ -288,91 +335,9 @@ function getBridgeHealth(bridge) {
     return health;
 }
 
-function openBridgeModal(db_id = null) {
-    const modal = document.getElementById('bridgeModal');
-    const title = document.getElementById('bridgeModalTitle');
-    
-    if (db_id) {
-        title.innerText = 'Edit Bridge Parameters';
-        const bridge = liveBridgeData.find(b => b.db_id === db_id);
-        document.getElementById('modalBridgeId').value = bridge.db_id;
-        document.getElementById('modalBridgeCode').value = bridge.id; 
-        document.getElementById('modalBridgeName').value = bridge.name;
-        document.getElementById('modalBridgeLocation').value = bridge.location;
-        document.getElementById('modalBridgeRemarks').value = bridge.remarks || '';
-        document.getElementById('modalBridgeSpanCount').value = bridge.span_count || 1;
-    } else {
-        title.innerText = 'Add New Bridge';
-        document.getElementById('modalBridgeId').value = '';
-        document.getElementById('modalBridgeCode').value = '';
-        document.getElementById('modalBridgeName').value = '';
-        document.getElementById('modalBridgeLocation').value = '';
-        document.getElementById('modalBridgeRemarks').value = '';
-        document.getElementById('modalBridgeSpanCount').value = 1;
-    }
-    modal.style.display = 'flex';
-}
-
-function closeBridgeModal() {
-    document.getElementById('bridgeModal').style.display = 'none';
-}
-
-async function saveBridge() {
-    const db_id = document.getElementById('modalBridgeId').value;
-    const payload = {
-        bridge_code: document.getElementById('modalBridgeCode').value,
-        name: document.getElementById('modalBridgeName').value,
-        location: document.getElementById('modalBridgeLocation').value,
-        remarks: document.getElementById('modalBridgeRemarks').value,
-        span_count: parseInt(document.getElementById('modalBridgeSpanCount').value) || 1
-    };
-
-    if(!payload.bridge_code || !payload.name) return alert("Bridge Code and Name are required!");
-
-    const method = db_id ? 'PUT' : 'POST';
-    const url = db_id ? `/api/bridges/${db_id}` : '/api/bridges';
-
-    try {
-        const res = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-            closeBridgeModal();
-            fetchDatabaseStats(); 
-        } else alert('Database update failed.');
-    } catch (error) { console.error("Network Error:", error); }
-}
-
-async function saveBridgeRemarks() {
-    if (!currentActiveBridge) return;
-    const newRemarks = document.getElementById('bridgeRemarks').value;
-    const btn = document.querySelector('.remarks-section .btn-primary');
-    btn.innerText = "Saving...";
-    
-    try {
-        const response = await fetch(`/api/bridges/${currentActiveBridge.db_id}/remarks`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ remarks: newRemarks })
-        });
-        
-        if(response.ok) {
-            btn.innerText = "✅ Saved Successfully!";
-            fetchDatabaseStats(); 
-            setTimeout(() => { btn.innerText = "💾 Save Remarks"; }, 2000);
-        }
-    } catch (e) {
-        console.error("Save failed", e);
-        btn.innerText = "💾 Save Remarks";
-    }
-}
-
 function renderAnalytics(stats) {
-    // FIXED: Stripped total defects logic
-    document.getElementById('totalBridgesValue').innerText = stats.total_bridges;
+    const tbVal = document.getElementById('totalBridgesValue');
+    if(tbVal) tbVal.innerText = stats.total_bridges;
 
     let healthCounts = { 'Bad': 0, 'Poor': 0, 'Fair': 0 };
 
@@ -380,29 +345,38 @@ function renderAnalytics(stats) {
         healthCounts[getBridgeHealth(bridge)]++;
     });
 
-    document.getElementById('countHigh').innerText = healthCounts['Bad'];
-    document.getElementById('countReview').innerText = healthCounts['Poor'];
-    document.getElementById('countLow').innerText = healthCounts['Fair'];
-
-    const ctx = document.getElementById('globalConditionChart').getContext('2d');
-    if (globalChartInstance) globalChartInstance.destroy();
+    const cH = document.getElementById('countHigh');
+    const cR = document.getElementById('countReview');
+    const cL = document.getElementById('countLow');
     
-    globalChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: { 
-            labels: ['Bad (Critical)', 'Poor (Review)', 'Fair (Safe)'], 
-            datasets: [{ 
-                data: [healthCounts['Bad'], healthCounts['Poor'], healthCounts['Fair']], 
-                backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], 
-                borderWidth: 0 
-            }] 
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '65%' }
-    });
+    if(cH) cH.innerText = healthCounts['Bad'];
+    if(cR) cR.innerText = healthCounts['Poor'];
+    if(cL) cL.innerText = healthCounts['Fair'];
+
+    const canvas = document.getElementById('globalConditionChart');
+    if(canvas) {
+        const ctx = canvas.getContext('2d');
+        if (globalChartInstance) globalChartInstance.destroy();
+        
+        globalChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { 
+                labels: ['Bad (Critical)', 'Poor (Review)', 'Fair (Safe)'], 
+                datasets: [{ 
+                    data: [healthCounts['Bad'], healthCounts['Poor'], healthCounts['Fair']], 
+                    backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], 
+                    borderWidth: 0 
+                }] 
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '65%' }
+        });
+    }
 }
 
 function renderBridges(bridges) {
     const bridgeGrid = document.getElementById('bridgeGrid');
+    if(!bridgeGrid) return;
+    
     bridgeGrid.innerHTML = ''; 
     
     bridges.forEach(bridge => {
@@ -434,36 +408,53 @@ function renderBridges(bridges) {
 
 function showBridgeList() {
     currentActiveBridge = null; currentActiveMission = null;
-    document.getElementById('bridgeListView').style.display = 'block';
-    document.getElementById('bridgeDetailView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'none';
+    const lv = document.getElementById('bridgeListView');
+    const dv = document.getElementById('bridgeDetailView');
+    const mv = document.getElementById('missionDetailView');
+    
+    if(lv) lv.style.display = 'block';
+    if(dv) dv.style.display = 'none';
+    if(mv) mv.style.display = 'none';
 }
 
 function showBridgeDetails(bridge) {
     currentActiveBridge = bridge; currentActiveMission = null;
-    document.getElementById('bridgeListView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'none';
-    document.getElementById('bridgeDetailView').style.display = 'block';
+    
+    const lv = document.getElementById('bridgeListView');
+    const dv = document.getElementById('bridgeDetailView');
+    const mv = document.getElementById('missionDetailView');
+    
+    if(lv) lv.style.display = 'none';
+    if(mv) mv.style.display = 'none';
+    if(dv) dv.style.display = 'block';
 
-    document.getElementById('detailName').innerText = bridge.name;
-    document.getElementById('detailLocation').innerText = bridge.location;
-    document.getElementById('detailId').innerText = bridge.id;
+    const dn = document.getElementById('detailName');
+    const dl = document.getElementById('detailLocation');
+    const di = document.getElementById('detailId');
+    
+    if(dn) dn.innerText = bridge.name;
+    if(dl) dl.innerText = bridge.location;
+    if(di) di.innerText = bridge.id;
 
     let bridgeHealth = getBridgeHealth(bridge); 
 
     const badge = document.getElementById('bridgeConditionBadge');
-    if (bridgeHealth === 'Bad') {
-        badge.className = 'status-badge status-bad';
-        badge.innerHTML = '🚨 Condition: BAD (Critical)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "CRITICAL CONDITION: Major structural anomalies detected.";
-    } else if (bridgeHealth === 'Poor') {
-        badge.className = 'status-badge status-poor';
-        badge.innerHTML = '⚠️ Condition: POOR (Monitor)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "MODERATE DETERIORATION: Continue monitoring required.";
-    } else {
-        badge.className = 'status-badge status-fair';
-        badge.innerHTML = '✅ Condition: FAIR (Safe)';
-        document.getElementById('bridgeRemarks').value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
+    const remarks = document.getElementById('bridgeRemarks');
+    
+    if(badge && remarks) {
+        if (bridgeHealth === 'Bad') {
+            badge.className = 'status-badge status-bad';
+            badge.innerHTML = '🚨 Condition: BAD (Critical)';
+            remarks.value = bridge.remarks || "CRITICAL CONDITION: Major structural anomalies detected.";
+        } else if (bridgeHealth === 'Poor') {
+            badge.className = 'status-badge status-poor';
+            badge.innerHTML = '⚠️ Condition: POOR (Monitor)';
+            remarks.value = bridge.remarks || "MODERATE DETERIORATION: Continue monitoring required.";
+        } else {
+            badge.className = 'status-badge status-fair';
+            badge.innerHTML = '✅ Condition: FAIR (Safe)';
+            remarks.value = bridge.remarks || "SAFE CONDITION: Structure displaying normal wear.";
+        }
     }
 
     let latestMissionIdLabel = 'Unknown';
@@ -495,15 +486,20 @@ function showBridgeDetails(bridge) {
         }
     }
 
-    const ctx = document.getElementById('defectChart').getContext('2d');
-    if (detailChartInstance) detailChartInstance.destroy();
-    detailChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-    });
+    const canvas = document.getElementById('defectChart');
+    if(canvas) {
+        const ctx = canvas.getContext('2d');
+        if (detailChartInstance) detailChartInstance.destroy();
+        detailChartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
 
     const missionGrid = document.getElementById('missionListGrid');
+    if(!missionGrid) return;
+    
     missionGrid.innerHTML = '';
     
     if (!bridge.missions || bridge.missions.length === 0) {
@@ -545,15 +541,20 @@ function showBridgeDetails(bridge) {
     });
 }
 
-function backToBridgeDetails() { if(currentActiveBridge) showBridgeDetails(currentActiveBridge); }
+window.backToBridgeDetails = function() { 
+    if(currentActiveBridge) showBridgeDetails(currentActiveBridge); 
+};
 
 function showMissionDetails(missionId) {
     currentActiveMission = missionId;
-    document.getElementById('bridgeDetailView').style.display = 'none';
-    document.getElementById('missionDetailView').style.display = 'block';
+    const dv = document.getElementById('bridgeDetailView');
+    const mv = document.getElementById('missionDetailView');
+    
+    if(dv) dv.style.display = 'none';
+    if(mv) mv.style.display = 'block';
 
-    const missionLabel = `Flight Mission #${missionId}`;
-    document.getElementById('missionDetailTitle').innerText = missionLabel;
+    const mt = document.getElementById('missionDetailTitle');
+    if(mt) mt.innerText = `Flight Mission #${missionId}`;
 
     const targetMission = currentActiveBridge.missions.find(m => m.id === missionId);
     const missionStatus = targetMission ? targetMission.status : 'Unknown';
@@ -568,10 +569,12 @@ function showMissionDetails(missionId) {
 
     if(actionContainer) actionContainer.style.display = 'block';
 
+    // FIXED: The delete controls are now ALWAYS visible in the gallery
+    if(deleteControls) deleteControls.style.display = 'flex';
+    cancelDeleteMode();
+
     if (missionStatus === 'Awaiting Analysis' || missionStatus === 'Processing') {
         if(chartContainer) chartContainer.style.display = 'none';
-        if(deleteControls) deleteControls.style.display = 'flex';
-        cancelDeleteMode();
         
         if(aiTitle) aiTitle.innerText = "Data Ready for Analysis";
         if(aiDesc) aiDesc.innerHTML = "Raw images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO AI.";
@@ -581,7 +584,6 @@ function showMissionDetails(missionId) {
         }
     } else {
         if(chartContainer) chartContainer.style.display = 'block';
-        if(deleteControls) deleteControls.style.display = 'none';
         isDeleteMode = false;
         
         if(aiTitle) aiTitle.innerText = "Re-Run AI Analysis";
@@ -595,10 +597,13 @@ function showMissionDetails(missionId) {
     const allImages = currentActiveBridge.images || [];
     const missionImages = allImages.filter(img => String(img.mission_id) === String(missionId));
     
-    if(missionImages.length === 0) {
-         document.getElementById('missionDetailSubtitle').innerText = `✅ Clean Inspection: No structural defects detected during this mission.`;
-    } else {
-         document.getElementById('missionDetailSubtitle').innerText = `${missionImages.length} Data points captured for ${currentActiveBridge.name}`;
+    const ms = document.getElementById('missionDetailSubtitle');
+    if(ms) {
+        if(missionImages.length === 0) {
+             ms.innerText = `✅ Clean Inspection: No structural defects detected during this mission.`;
+        } else {
+             ms.innerText = `${missionImages.length} Data points captured for ${currentActiveBridge.name}`;
+        }
     }
 
     let severityCounts = { 'Bad':0, 'Poor':0, 'Fair':0 };
@@ -620,23 +625,27 @@ function showMissionDetails(missionId) {
         }
     }
 
-    const ctx = document.getElementById('missionDefectChart').getContext('2d');
-    if (missionChartInstance) missionChartInstance.destroy();
-    missionChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '50%' }
-    });
+    const canvas = document.getElementById('missionDefectChart');
+    if(canvas) {
+        const ctx = canvas.getContext('2d');
+        if (missionChartInstance) missionChartInstance.destroy();
+        missionChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: chartData, backgroundColor: colors, borderWidth: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '50%' }
+        });
+    }
 
-    document.getElementById('filterType').value = 'all'; 
+    const ft = document.getElementById('filterType');
+    if(ft) ft.value = 'all'; 
+    
     applyGalleryFilters();
 }
 
-async function startAiAnalysis() {
+window.startAiAnalysis = async function() {
     if (!currentActiveMission) return;
     
     cancelDeleteMode();
-    document.getElementById('deleteControls').style.display = 'none';
     
     const btn = document.getElementById('runAiBtn');
     const progressContainer = document.getElementById('analysisProgressBarContainer');
@@ -649,14 +658,18 @@ async function startAiAnalysis() {
     const confVal = parseInt(savedConf) / 100.0;
     const imgSizeVal = parseInt(savedSize);
 
-    btn.disabled = true;
-    btn.innerHTML = '⚙️ RUNNING YOLO AI...';
-    btn.style.background = '#f59e0b';
+    if(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⚙️ RUNNING YOLO AI...';
+        btn.style.background = '#f59e0b';
+    }
     
-    progressContainer.style.display = 'block';
-    progressText.style.display = 'block';
-    progressBar.style.width = '0%';
-    progressText.innerText = 'Downloading images from Cloudinary...';
+    if(progressContainer) progressContainer.style.display = 'block';
+    if(progressText) {
+        progressText.style.display = 'block';
+        progressText.innerText = 'Downloading images from Cloudinary...';
+    }
+    if(progressBar) progressBar.style.width = '0%';
 
     try {
         await fetch('/api/mission/analyze', {
@@ -674,34 +687,40 @@ async function startAiAnalysis() {
             const statusData = await statusRes.json();
             
             if (statusData.status === 'Processing') {
-                progressBar.style.width = `${statusData.progress}%`;
-                if (statusData.total > 0) {
+                if(progressBar) progressBar.style.width = `${statusData.progress}%`;
+                if (statusData.total > 0 && progressText) {
                     progressText.innerText = `Analyzing Frames: ${statusData.processed} / ${statusData.total} Complete`;
                 }
             }
             
             if(statusData.status === 'Completed' || statusData.status === 'Unknown') {
                 clearInterval(pollInterval);
-                btn.innerHTML = '✅ ANALYSIS COMPLETE';
-                btn.style.background = '#10b981';
-                progressText.innerText = 'Database updated successfully!';
+                if(btn) {
+                    btn.innerHTML = '✅ ANALYSIS COMPLETE';
+                    btn.style.background = '#10b981';
+                }
+                if(progressText) progressText.innerText = 'Database updated successfully!';
                 
                 setTimeout(() => { fetchDatabaseStats(); }, 1500);
             }
         }, 1000); 
     } catch (e) {
         console.error("AI Error:", e);
-        btn.disabled = false;
-        btn.innerHTML = '❌ ERROR. TRY AGAIN.';
-        btn.style.background = '#ef4444';
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = '❌ ERROR. TRY AGAIN.';
+            btn.style.background = '#ef4444';
+        }
     }
-}
+};
 
-function applyGalleryFilters() {
+window.applyGalleryFilters = function() {
     if (!currentActiveBridge || !currentActiveMission) return;
     const allImages = currentActiveBridge.images || [];
     const missionImages = allImages.filter(img => String(img.mission_id) === String(currentActiveMission));
-    const selectedType = document.getElementById('filterType').value.toLowerCase();
+    
+    const ft = document.getElementById('filterType');
+    const selectedType = ft ? ft.value.toLowerCase() : 'all';
     
     const filteredImages = missionImages.filter(img => {
         const imgType = (img.defect_type || img.type || 'Unknown').toLowerCase();
@@ -709,11 +728,14 @@ function applyGalleryFilters() {
     });
     
     renderImageGallery(filteredImages);
-}
+};
 
 function renderImageGallery(images) {
     const containerDefects = document.getElementById('galleryContainerDefects');
     const containerRaw = document.getElementById('galleryContainerRaw');
+    
+    if(!containerDefects || !containerRaw) return;
+    
     containerDefects.innerHTML = '';
     containerRaw.innerHTML = '';
     
@@ -835,6 +857,89 @@ function buildGalleryGrid(imageArray, container) {
     });
 }
 
+window.openBridgeModal = function(db_id = null) {
+    const modal = document.getElementById('bridgeModal');
+    const title = document.getElementById('bridgeModalTitle');
+    
+    if (db_id) {
+        if(title) title.innerText = 'Edit Bridge Parameters';
+        const bridge = liveBridgeData.find(b => b.db_id === db_id);
+        if(document.getElementById('modalBridgeId')) document.getElementById('modalBridgeId').value = bridge.db_id;
+        if(document.getElementById('modalBridgeCode')) document.getElementById('modalBridgeCode').value = bridge.id; 
+        if(document.getElementById('modalBridgeName')) document.getElementById('modalBridgeName').value = bridge.name;
+        if(document.getElementById('modalBridgeLocation')) document.getElementById('modalBridgeLocation').value = bridge.location;
+        if(document.getElementById('modalBridgeRemarks')) document.getElementById('modalBridgeRemarks').value = bridge.remarks || '';
+        if(document.getElementById('modalBridgeSpanCount')) document.getElementById('modalBridgeSpanCount').value = bridge.span_count || 1;
+    } else {
+        if(title) title.innerText = 'Add New Bridge';
+        if(document.getElementById('modalBridgeId')) document.getElementById('modalBridgeId').value = '';
+        if(document.getElementById('modalBridgeCode')) document.getElementById('modalBridgeCode').value = '';
+        if(document.getElementById('modalBridgeName')) document.getElementById('modalBridgeName').value = '';
+        if(document.getElementById('modalBridgeLocation')) document.getElementById('modalBridgeLocation').value = '';
+        if(document.getElementById('modalBridgeRemarks')) document.getElementById('modalBridgeRemarks').value = '';
+        if(document.getElementById('modalBridgeSpanCount')) document.getElementById('modalBridgeSpanCount').value = 1;
+    }
+    if(modal) modal.style.display = 'flex';
+};
+
+window.closeBridgeModal = function() {
+    const modal = document.getElementById('bridgeModal');
+    if(modal) modal.style.display = 'none';
+};
+
+window.saveBridge = async function() {
+    const db_id = document.getElementById('modalBridgeId').value;
+    const payload = {
+        bridge_code: document.getElementById('modalBridgeCode').value,
+        name: document.getElementById('modalBridgeName').value,
+        location: document.getElementById('modalBridgeLocation').value,
+        remarks: document.getElementById('modalBridgeRemarks').value,
+        span_count: parseInt(document.getElementById('modalBridgeSpanCount').value) || 1
+    };
+
+    if(!payload.bridge_code || !payload.name) return alert("Bridge Code and Name are required!");
+
+    const method = db_id ? 'PUT' : 'POST';
+    const url = db_id ? `/api/bridges/${db_id}` : '/api/bridges';
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            window.closeBridgeModal();
+            fetchDatabaseStats(); 
+        } else alert('Database update failed.');
+    } catch (error) { console.error("Network Error:", error); }
+};
+
+window.saveBridgeRemarks = async function() {
+    if (!currentActiveBridge) return;
+    const newRemarks = document.getElementById('bridgeRemarks').value;
+    const btn = document.querySelector('.remarks-section .btn-primary');
+    if(btn) btn.innerText = "Saving...";
+    
+    try {
+        const response = await fetch(`/api/bridges/${currentActiveBridge.db_id}/remarks`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ remarks: newRemarks })
+        });
+        
+        if(response.ok) {
+            if(btn) btn.innerText = "✅ Saved Successfully!";
+            fetchDatabaseStats(); 
+            setTimeout(() => { if(btn) btn.innerText = "💾 Save Remarks"; }, 2000);
+        }
+    } catch (e) {
+        console.error("Save failed", e);
+        if(btn) btn.innerText = "💾 Save Remarks";
+    }
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     const streamImg = document.getElementById('liveVideoStream');
     const offlineOverlay = document.getElementById('offlineOverlay');
@@ -842,12 +947,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (streamImg) {
         streamImg.onerror = function() {
             this.style.display = 'none';
-            offlineOverlay.style.display = 'flex';
+            if(offlineOverlay) offlineOverlay.style.display = 'flex';
             logToTerminal(`> WARNING: Video stream connection lost.`, '#EF4444');
         };
         streamImg.onload = function() {
             this.style.display = 'block';
-            offlineOverlay.style.display = 'none';
+            if(offlineOverlay) offlineOverlay.style.display = 'none';
         };
     }
 });
@@ -856,13 +961,16 @@ window.retryStream = function() {
     const streamImg = document.getElementById('liveVideoStream');
     const offlineOverlay = document.getElementById('offlineOverlay');
     logToTerminal(`> Attempting to re-establish video link...`, '#FACC15');
-    offlineOverlay.style.display = 'none'; 
-    streamImg.style.display = 'block';
-    streamImg.src = "/video_feed?t=" + new Date().getTime();
+    if(offlineOverlay) offlineOverlay.style.display = 'none'; 
+    if(streamImg) {
+        streamImg.style.display = 'block';
+        streamImg.src = "/video_feed?t=" + new Date().getTime();
+    }
 };
 
 function populateFlightDropdown() {
     const select = document.getElementById('flightBridgeSelect');
+    if(!select) return;
     select.innerHTML = '<option value="" disabled selected>-- Select Target Bridge --</option>';
     liveBridgeData.forEach(bridge => {
         const option = document.createElement('option');
@@ -874,15 +982,18 @@ function populateFlightDropdown() {
 
 function logToTerminal(msg, color="#38BDF8") {
     const terminal = document.getElementById('flightLogTerminal');
+    if(!terminal) return;
     const time = new Date().toLocaleTimeString();
     terminal.innerHTML += `<span style="color:${color}">[${time}] ${msg}</span><br>`;
     terminal.scrollTop = terminal.scrollHeight;
 }
 
-async function setFlightSpan(span, btnElement) {
-    document.getElementById('flightSpanInput').value = span;
+window.setFlightSpan = async function(span, btnElement) {
+    const fsi = document.getElementById('flightSpanInput');
+    if(fsi) fsi.value = span;
+    
     document.querySelectorAll('.span-btn').forEach(b => b.classList.remove('active'));
-    btnElement.classList.add('active');
+    if(btnElement) btnElement.classList.add('active');
     
     if(isFlightActive) {
         try {
@@ -894,14 +1005,14 @@ async function setFlightSpan(span, btnElement) {
     } else {
         logToTerminal(`> Target Zone set to: ${span}`, '#38BDF8');
     }
-}
+};
 
 async function fetchLiveCaptures() {
     if (!currentActiveMission) return;
     try {
         const gallery = document.getElementById('liveCaptureGallery');
         
-        if (isFlightActive) {
+        if (isFlightActive && gallery) {
             const res = await fetch(`/api/mission/${currentActiveMission}/live_frames?t=${new Date().getTime()}`);
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
@@ -919,7 +1030,7 @@ async function fetchLiveCaptures() {
     } catch(e) { console.error("Capture sync error:", e); }
 }
 
-async function toggleFlightMission() {
+window.toggleFlightMission = async function() {
     const btn = document.getElementById('toggleMissionBtn');
     const bridgeSelect = document.getElementById('flightBridgeSelect');
     const spanInput = document.getElementById('flightSpanInput');
@@ -943,25 +1054,33 @@ async function toggleFlightMission() {
                 currentActiveMission = data.mission_id;
                 bridgeSelect.disabled = true;
                 
-                btn.innerHTML = '🛑 STOP MISSION & SAVE DATA';
-                btn.style.background = '#EF4444';
+                if(btn) {
+                    btn.innerHTML = '🛑 STOP MISSION & SAVE DATA';
+                    btn.style.background = '#EF4444';
+                }
                 logToTerminal(`> MISSION #${data.mission_id} INITIATED. Auto-Capture ARMED.`, '#22C55E');
                 logToTerminal(`> Capturing HD raw photos via secondary pipeline...`, '#FACC15');
 
-                document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first high-res frame from drone...</p>';
+                const lcg = document.getElementById('liveCaptureGallery');
+                if(lcg) lcg.innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first high-res frame from drone...</p>';
+                
                 liveCaptureInterval = setInterval(fetchLiveCaptures, 2000);
             }
         } catch (e) { logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444'); }
     } else {
         clearInterval(liveCaptureInterval);
-        btn.innerHTML = '☁️ UPLOADING TO CLOUD...';
-        btn.disabled = true;
-        btn.style.background = '#F59E0B'; 
+        if(btn) {
+            btn.innerHTML = '☁️ UPLOADING TO CLOUD...';
+            btn.disabled = true;
+            btn.style.background = '#F59E0B'; 
+        }
         
-        progressContainer.style.display = 'block';
-        progressText.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressText.innerText = 'Securing files to Cloudinary...';
+        if(progressContainer) progressContainer.style.display = 'block';
+        if(progressText) {
+            progressText.style.display = 'block';
+            progressText.innerText = 'Securing files to Cloudinary...';
+        }
+        if(progressBar) progressBar.style.width = '0%';
 
         logToTerminal(`> Mission stopped. Saving raw data securely to Cloudinary Database...`, '#F59E0B');
         
@@ -974,8 +1093,8 @@ async function toggleFlightMission() {
                 const statusData = await statusRes.json();
                 
                 if (statusData.status === 'Saving to Cloud') {
-                    progressBar.style.width = `${statusData.progress}%`;
-                    if (statusData.total > 0) {
+                    if(progressBar) progressBar.style.width = `${statusData.progress}%`;
+                    if (statusData.total > 0 && progressText) {
                         progressText.innerText = `Uploading Frames: ${statusData.processed} / ${statusData.total} Secured`;
                     }
                 }
@@ -983,24 +1102,29 @@ async function toggleFlightMission() {
                 if(statusData.status === 'Awaiting Analysis' || statusData.status === 'Unknown') {
                     clearInterval(pollInterval);
                     
-                    progressContainer.style.display = 'none';
-                    progressText.style.display = 'none';
-                    btn.disabled = false;
-                    btn.innerHTML = '▶ START MISSION';
-                    btn.style.background = '#10B981';
+                    if(progressContainer) progressContainer.style.display = 'none';
+                    if(progressText) progressText.style.display = 'none';
+                    
+                    if(btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '▶ START MISSION';
+                        btn.style.background = '#10B981';
+                    }
                     
                     logToTerminal(`> ✅ Cloud Upload Complete! Open the Database to run AI Analysis.`, '#22C55E');
                     
                     fetchDatabaseStats(); 
                     currentActiveMission = null;
-                    bridgeSelect.disabled = false;
-                    document.getElementById('liveCaptureGallery').innerHTML = '<p class="text-muted" style="margin-top: 10px;">✅ Mission Saved.</p>';
+                    if(bridgeSelect) bridgeSelect.disabled = false;
+                    
+                    const lcg = document.getElementById('liveCaptureGallery');
+                    if(lcg) lcg.innerHTML = '<p class="text-muted" style="margin-top: 10px;">✅ Mission Saved.</p>';
                 }
             }, 1000); 
             
         } catch (e) {
             logToTerminal(`> ERROR stopping mission: ${e}`, '#EF4444');
-            btn.disabled = false;
+            if(btn) btn.disabled = false;
         }
     }
-}
+};
