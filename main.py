@@ -63,7 +63,7 @@ class AnalyzeParams(BaseModel):
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 try:
-    model = YOLO('AIModel/AIModelFinalV2.pt')
+    model = YOLO('AIModel/AIModelFinalV4.pt')
     print("YOLO Model Loaded Successfully!")
 except Exception as e:
     print(f"Warning: YOLO Model not found or failed to load. {e}")
