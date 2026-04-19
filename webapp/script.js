@@ -569,7 +569,6 @@ function showMissionDetails(missionId) {
 
     if(actionContainer) actionContainer.style.display = 'block';
 
-    // FIXED: The delete controls are now ALWAYS visible in the gallery
     if(deleteControls) deleteControls.style.display = 'flex';
     cancelDeleteMode();
 
@@ -581,6 +580,7 @@ function showMissionDetails(missionId) {
         if(aiBtn) {
             aiBtn.innerHTML = "🧠 RUN AI ANALYSIS";
             aiBtn.style.background = "#8b5cf6";
+            aiBtn.disabled = false; // FIXED: Ensures the button is always unlocked when opening the view
         }
     } else {
         if(chartContainer) chartContainer.style.display = 'block';
@@ -591,6 +591,7 @@ function showMissionDetails(missionId) {
         if(aiBtn) {
             aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
             aiBtn.style.background = "#3b82f6"; 
+            aiBtn.disabled = false; // FIXED: Ensures the re-scan button is always unlocked
         }
     }
 
@@ -646,6 +647,8 @@ window.startAiAnalysis = async function() {
     if (!currentActiveMission) return;
     
     cancelDeleteMode();
+    const delCtrls = document.getElementById('deleteControls');
+    if(delCtrls) delCtrls.style.display = 'none';
     
     const btn = document.getElementById('runAiBtn');
     const progressContainer = document.getElementById('analysisProgressBarContainer');
@@ -659,7 +662,7 @@ window.startAiAnalysis = async function() {
     const imgSizeVal = parseInt(savedSize);
 
     if(btn) {
-        btn.disabled = true;
+        btn.disabled = true; // Locks the button so it can't be clicked twice
         btn.innerHTML = '⚙️ RUNNING YOLO AI...';
         btn.style.background = '#f59e0b';
     }
@@ -698,6 +701,7 @@ window.startAiAnalysis = async function() {
                 if(btn) {
                     btn.innerHTML = '✅ ANALYSIS COMPLETE';
                     btn.style.background = '#10b981';
+                    btn.disabled = false; // FIXED: Safely unlocks the button immediately after completion
                 }
                 if(progressText) progressText.innerText = 'Database updated successfully!';
                 
@@ -707,7 +711,7 @@ window.startAiAnalysis = async function() {
     } catch (e) {
         console.error("AI Error:", e);
         if(btn) {
-            btn.disabled = false;
+            btn.disabled = false; // FIXED: Also unlocks the button if an error crashes the analysis
             btn.innerHTML = '❌ ERROR. TRY AGAIN.';
             btn.style.background = '#ef4444';
         }
