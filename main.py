@@ -40,6 +40,8 @@ try:
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS raw_image_url TEXT;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;")
+    # NEW: Add the custom attribute column for the location notes
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS custom_attribute TEXT DEFAULT '';")
     cursor.execute("UPDATE captured_images SET raw_image_url = image_url WHERE raw_image_url IS NULL AND defect_type = 'Raw Image';")
     conn.commit()
     cursor.close()
@@ -54,6 +56,8 @@ class RemarkUpdate(BaseModel): remarks: str
 class SpanUpdateParams(BaseModel): span_target: str
 class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str; remarks: str; span_count: int
 class BulkDeleteParams(BaseModel): image_ids: list[int]
+# NEW: Data model for saving the attribute
+class AttributeUpdate(BaseModel): custom_attribute: str
 
 class MissionStartParams(BaseModel): 
     bridge_id: int
@@ -114,7 +118,6 @@ def upload_raw_worker(mission_id, span_target):
         for file in files:
             filepath = os.path.join(TEMP_DIR, file)
             
-            # Extract GPS from the clever filename encoding
             try:
                 parts = file.replace('.jpg', '').split('_')
                 lat_val = float(parts[3])
@@ -128,8 +131,8 @@ def upload_raw_worker(mission_id, span_target):
                 secure_url = upload_result['secure_url']
                 
                 cursor.execute("""
-                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url, latitude, longitude)
-                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s, %s, %s)
+                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url, latitude, longitude, custom_attribute)
+                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s, %s, %s, '')
                 """, (mission_id, span_target, secure_url, secure_url, lat_val, lon_val))
                 conn.commit()
             except Exception as e:
@@ -283,12 +286,10 @@ async def receive_highres_frame(request: Request):
     if is_active and m_id is not None:
         frame_bytes = await request.body()
         
-        # EXTRACT GPS HEADERS FROM DRONE
         lat = request.headers.get('X-Latitude', '0.0')
         lon = request.headers.get('X-Longitude', '0.0')
         
         timestamp = int(time.time() * 1000)
-        # Encode GPS into the temp filename so it survives the thread handoff
         filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}_{lat}_{lon}.jpg")
         
         with open(filepath, "wb") as f: f.write(frame_bytes)
@@ -407,6 +408,22 @@ def trigger_ai_analysis(params: AnalyzeParams):
         return {"status": "success"}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/mission/{mission_id}/force-reset")
+def force_reset_mission(mission_id: int):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE inspection_missions SET status = 'Awaiting Analysis' WHERE id = %s", (mission_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        with state_lock:
+            if mission_id in flight_state["mission_progress"]:
+                del flight_state["mission_progress"][mission_id]
+        return {"status": "success"}
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/mission/{mission_id}/status")
 def get_mission_status(mission_id: int):
     try:
@@ -463,16 +480,29 @@ def get_bridge_data():
             cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s AND defect_type != 'Raw Image' GROUP BY severity_level", (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            # PULL LATITUDE AND LONGITUDE FROM DB
-            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score, latitude, longitude FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
+            # PULL CUSTOM ATTRIBUTE FROM DB (Index 11)
+            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score, latitude, longitude, custom_attribute FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
             
-            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A', "lat": img[9], "lon": img[10]} for img in cursor.fetchall()]
+            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A', "lat": img[9], "lon": img[10], "attribute": img[11] if len(img) > 11 and img[11] else ''} for img in cursor.fetchall()]
 
             bridge_list.append({"db_id": bridge_id, "id": b[1], "name": b[2], "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery, "missions": bridge_missions})
 
         cursor.close(); conn.close()
         return {"status": "success", "stats": {"total_bridges": total_bridges, "severity": severity_data}, "bridges": bridge_list}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+# NEW API: Save the custom attribute text
+@app.put("/api/images/{image_id}/attribute")
+def update_image_attribute(image_id: int, payload: AttributeUpdate):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE captured_images SET custom_attribute = %s WHERE id = %s", (payload.custom_attribute, image_id))
+        conn.commit()
+        cursor.close(); conn.close()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/bridges")
 def add_bridge(bridge: BridgeCreateUpdate):

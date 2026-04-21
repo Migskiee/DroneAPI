@@ -220,7 +220,12 @@
                                 <h3 id="aiActionTitle" style="margin-bottom: 5px; color: #0f172a;">Data Ready for Analysis</h3>
                                 <p id="aiActionDesc" class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO AI.</p>
                             </div>
-                            <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
+                            <div style="display: flex; gap: 10px;">
+                                <button id="emergencyResetBtn" class="btn btn-secondary" style="display: none; background: #ef4444; color: white; font-weight: bold; border: none; padding: 15px 20px;" onclick="forceResetMission()">
+                                    ⚠️ FORCE RESET
+                                </button>
+                                <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
+                            </div>
                         </div>
                         
                         <div id="analysisProgressBarContainer" style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
@@ -352,7 +357,7 @@
                 <img id="previewImageSrc" src="" alt="Preview">
             </div>
             <div class="preview-info-section">
-                <span class="close-preview" onclick="closeImagePreview(event)">&times;</span>
+                <span class="close-preview" onclick="closeImagePreview(event)">×</span>
                 <h3 style="color: #0f172a; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; padding-right: 30px;">Analysis Details</h3>
                 
                 <div class="preview-info-row">
@@ -377,7 +382,17 @@
                 
                 <div class="preview-info-row">
                     <span class="preview-info-label">Location</span>
-                    <span class="preview-info-value" id="previewSpan">Loading...</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="preview-info-value" id="previewSpan">Loading...</span>
+                        <button id="addAttrBtn" class="btn btn-secondary" style="margin:0; padding: 2px 8px; font-size: 12px; border-radius: 5px; background: #e2e8f0; border: none; color: #475569; font-weight: bold; cursor: pointer;" onclick="toggleAttributeInput()" title="Add Custom Attribute">+ Note</button>
+                    </div>
+                    
+                    <div id="attributeInputContainer" style="display: none; margin-top: 8px; gap: 5px; align-items: center;">
+                        <input type="text" id="customAttributeInput" class="form-control" placeholder="e.g. East pillar joint" style="padding: 6px; font-size: 13px; width: 100%;">
+                        <button class="btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px; background: #10b981; border: none;" onclick="saveImageAttribute()">Save</button>
+                    </div>
+                    
+                    <p id="previewAttributeText" class="text-muted" style="margin-top: 5px; font-size: 13px; font-style: italic; color: #64748b; display: none;"></p>
                 </div>
                 
                 <div class="preview-info-row">

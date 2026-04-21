@@ -9,6 +9,7 @@ let liveCaptureInterval = null;
 
 let isDeleteMode = false;
 let selectedForDelete = new Set();
+let currentPreviewImageId = null; // Track which image is open in modal
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -220,9 +221,96 @@ window.confirmBulkDelete = async function() {
     }
 };
 
+window.forceResetMission = async function() {
+    if (!currentActiveMission) return;
+    if(!confirm("⚠️ WARNING: Are you sure you want to Force Reset this mission? Only do this if the AI progress bar has been stuck or frozen for several minutes.")) return;
+    
+    const btn = document.getElementById('emergencyResetBtn');
+    if(btn) btn.innerText = "RESETTING...";
+    
+    try {
+        const res = await fetch(`/api/mission/${currentActiveMission}/force-reset`, { method: 'POST' });
+        if (res.ok) {
+            alert("✅ Mission successfully reset! You can now run the analysis again.");
+            fetchDatabaseStats(); 
+        }
+    } catch(e) {
+        console.error("Failed to reset mission:", e);
+        alert("Network error trying to reset mission.");
+    }
+};
+
+// NEW: Show/Hide Attribute TextBox
+window.toggleAttributeInput = function() {
+    const container = document.getElementById('attributeInputContainer');
+    if (container.style.display === 'none') {
+        container.style.display = 'flex';
+        document.getElementById('customAttributeInput').focus();
+    } else {
+        container.style.display = 'none';
+    }
+};
+
+// NEW: Save Attribute API Call
+window.saveImageAttribute = async function() {
+    if (!currentPreviewImageId) return;
+    
+    const inputVal = document.getElementById('customAttributeInput').value;
+    const btn = document.querySelector('#attributeInputContainer .btn-primary');
+    const originalText = btn.innerText;
+    
+    btn.innerText = "⏳";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`/api/images/${currentPreviewImageId}/attribute`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ custom_attribute: inputVal })
+        });
+
+        if (res.ok) {
+            btn.innerText = "✅";
+            
+            // Update local tracking cache
+            if(window.imageMetaData[currentPreviewImageId]) {
+                window.imageMetaData[currentPreviewImageId].attribute = inputVal;
+            }
+            
+            // Update UI text below the input
+            const attrText = document.getElementById('previewAttributeText');
+            if (inputVal.trim() !== '') {
+                attrText.innerText = "↳ " + inputVal;
+                attrText.style.display = 'block';
+            } else {
+                attrText.style.display = 'none';
+            }
+            
+            // Hide input box and refresh db stats silently
+            setTimeout(() => {
+                document.getElementById('attributeInputContainer').style.display = 'none';
+                btn.innerText = originalText;
+                btn.disabled = false;
+                fetchDatabaseStats();
+            }, 1000);
+        } else {
+            alert("Failed to save attribute.");
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Network error saving attribute.");
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
 function openImagePreview(imgId) {
     const data = window.imageMetaData ? window.imageMetaData[imgId] : null;
     if (!data) return;
+
+    currentPreviewImageId = imgId;
 
     const pImg = document.getElementById('previewImageSrc');
     const pType = document.getElementById('previewType');
@@ -231,9 +319,11 @@ function openImagePreview(imgId) {
     const pSize = document.getElementById('previewSize');
     const pSpan = document.getElementById('previewSpan');
     const pDate = document.getElementById('previewDate');
-    
     const pGpsLink = document.getElementById('gpsMapLink');
     const pGpsText = document.getElementById('gpsTextDisplay');
+    const attrInput = document.getElementById('customAttributeInput');
+    const attrText = document.getElementById('previewAttributeText');
+    const attrContainer = document.getElementById('attributeInputContainer');
     
     const modal = document.getElementById('imagePreviewModal');
 
@@ -250,11 +340,23 @@ function openImagePreview(imgId) {
     if(pSize) pSize.innerText = data.size;
     if(pSpan) pSpan.innerText = data.span;
     if(pDate) pDate.innerText = data.date;
+    
+    // Reset Attribute UI State
+    if(attrContainer) attrContainer.style.display = 'none';
+    if(attrInput) attrInput.value = data.attribute || '';
+    if(attrText) {
+        if (data.attribute && data.attribute.trim() !== '') {
+            attrText.innerText = "↳ " + data.attribute;
+            attrText.style.display = 'block';
+        } else {
+            attrText.style.display = 'none';
+        }
+    }
 
     if (data.lat && data.lon && data.lat !== 0.0 && data.lon !== 0.0) {
         if(pGpsLink) {
             pGpsLink.style.display = 'inline';
-            pGpsLink.href = `https://maps.google.com/?q=${data.lat},${data.lon}`;
+            pGpsLink.href = `http://googleusercontent.com/maps.google.com/maps?q=${data.lat},${data.lon}`;
         }
         if(pGpsText) pGpsText.innerText = `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}`;
     } else {
@@ -266,6 +368,7 @@ function openImagePreview(imgId) {
 }
 
 window.openLivePreview = function(url) {
+    currentPreviewImageId = null;
     const pImg = document.getElementById('previewImageSrc');
     const pType = document.getElementById('previewType');
     const pConf = document.getElementById('previewConfidence');
@@ -275,6 +378,12 @@ window.openLivePreview = function(url) {
     const pDate = document.getElementById('previewDate');
     const pGpsLink = document.getElementById('gpsMapLink');
     const pGpsText = document.getElementById('gpsTextDisplay');
+    
+    const attrInput = document.getElementById('customAttributeInput');
+    const attrText = document.getElementById('previewAttributeText');
+    const attrContainer = document.getElementById('attributeInputContainer');
+    const attrBtn = document.getElementById('addAttrBtn');
+    
     const modal = document.getElementById('imagePreviewModal');
 
     if(pImg) pImg.src = url;
@@ -283,10 +392,17 @@ window.openLivePreview = function(url) {
     if(pSev) pSev.innerHTML = `<span class="health-badge badge-pending" style="margin:0; font-size: 13px; padding: 6px 12px;">AWAITING AI</span>`;
     if(pSize) pSize.innerText = 'N/A';
     if(pSpan) pSpan.innerText = 'Active Flight Zone';
-    if(pDate) pDate.innerText = new Date().toLocaleString();
+    
+    const now = new Date();
+    if(pDate) pDate.innerText = now.toLocaleString('en-US', { timeZone: 'Asia/Manila' });
     
     if(pGpsLink) pGpsLink.style.display = 'none';
     if(pGpsText) pGpsText.innerText = "Syncing live telemetry...";
+    
+    // Hide attribute controls for live previews
+    if(attrBtn) attrBtn.style.display = 'none';
+    if(attrContainer) attrContainer.style.display = 'none';
+    if(attrText) attrText.style.display = 'none';
 
     if(modal) modal.style.display = 'flex';
 };
@@ -295,9 +411,13 @@ window.closeImagePreview = function(event) {
     if (event && event.target.id !== 'imagePreviewModal' && !event.target.classList.contains('close-preview')) return;
     const modal = document.getElementById('imagePreviewModal');
     const pImg = document.getElementById('previewImageSrc');
+    const attrBtn = document.getElementById('addAttrBtn');
     
     if(modal) modal.style.display = 'none';
     if(pImg) pImg.src = '';
+    if(attrBtn) attrBtn.style.display = 'inline-block'; // reset button visibility
+    
+    currentPreviewImageId = null;
 };
 
 async function fetchDatabaseStats() {
@@ -569,6 +689,7 @@ function showMissionDetails(missionId) {
     currentActiveMission = missionId;
     const dv = document.getElementById('bridgeDetailView');
     const mv = document.getElementById('missionDetailView');
+    const emergencyBtn = document.getElementById('emergencyResetBtn');
     
     if(dv) dv.style.display = 'none';
     if(mv) mv.style.display = 'block';
@@ -602,9 +723,19 @@ function showMissionDetails(missionId) {
             aiBtn.style.background = "#8b5cf6";
             aiBtn.disabled = false; 
         }
+        
+        if (missionStatus === 'Processing' && emergencyBtn) {
+            emergencyBtn.style.display = 'block';
+            aiBtn.disabled = true; 
+            aiBtn.innerHTML = "⚙️ PROCESSING...";
+        } else if (emergencyBtn) {
+            emergencyBtn.style.display = 'none';
+        }
+
     } else {
         if(chartContainer) chartContainer.style.display = 'block';
         isDeleteMode = false;
+        if(emergencyBtn) emergencyBtn.style.display = 'none';
         
         if(aiTitle) aiTitle.innerText = "Re-Run AI Analysis";
         if(aiDesc) aiDesc.innerHTML = "Want to scan with different confidence or resolution? Update your <b>Settings</b> and re-scan this flight.";
@@ -671,6 +802,7 @@ window.startAiAnalysis = async function() {
     if(delCtrls) delCtrls.style.display = 'none';
     
     const btn = document.getElementById('runAiBtn');
+    const emergencyBtn = document.getElementById('emergencyResetBtn');
     const progressContainer = document.getElementById('analysisProgressBarContainer');
     const progressBar = document.getElementById('analysisProgressBar');
     const progressText = document.getElementById('analysisProgressText');
@@ -686,6 +818,7 @@ window.startAiAnalysis = async function() {
         btn.innerHTML = '⚙️ RUNNING YOLO AI...';
         btn.style.background = '#f59e0b';
     }
+    if (emergencyBtn) emergencyBtn.style.display = 'block';
     
     if(progressContainer) progressContainer.style.display = 'block';
     if(progressText) {
@@ -716,13 +849,14 @@ window.startAiAnalysis = async function() {
                 }
             }
             
-            if(statusData.status === 'Completed' || statusData.status === 'Unknown') {
+            if(statusData.status === 'Completed' || statusData.status === 'Awaiting Analysis' || statusData.status === 'Unknown') {
                 clearInterval(pollInterval);
                 if(btn) {
                     btn.innerHTML = '✅ ANALYSIS COMPLETE';
                     btn.style.background = '#10b981';
                     btn.disabled = false;
                 }
+                if (emergencyBtn) emergencyBtn.style.display = 'none';
                 if(progressText) progressText.innerText = 'Database updated successfully!';
                 
                 setTimeout(() => { fetchDatabaseStats(); }, 1500);
@@ -842,9 +976,22 @@ function buildGalleryGrid(imageArray, container) {
                 statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">🚨 Defect Logged in Database</p>`;
             }
             
-            const dateStr = img.date || img.created_at || img.captured_at ? new Date(img.date || img.created_at || img.captured_at).toLocaleString() : 'Recent Capture';
+            let dateStr = 'Recent Capture';
+            const rawDate = img.date || img.created_at || img.captured_at;
+            if (rawDate) {
+                const utcStr = rawDate.toString().endsWith('Z') ? rawDate : rawDate + 'Z';
+                const d = new Date(utcStr);
+                dateStr = d.toLocaleString('en-US', { 
+                    timeZone: 'Asia/Manila',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
             
-            // Generate the GPS Text for the Gallery Card
             let gpsHtml = '';
             if (img.lat && img.lon && img.lat !== 0.0 && img.lon !== 0.0) {
                 gpsHtml = `<p class="text-muted" style="font-size: 11px; margin-bottom: 5px; font-family: monospace;">📍 ${img.lat.toFixed(5)}, ${img.lon.toFixed(5)}</p>`;
@@ -852,6 +999,7 @@ function buildGalleryGrid(imageArray, container) {
                 gpsHtml = `<p class="text-muted" style="font-size: 11px; margin-bottom: 5px; font-style: italic;">📍 GPS Unavailable</p>`;
             }
             
+            // LOAD ALL METADATA
             window.imageMetaData[img.id] = {
                 url: imgSrc,
                 type: defectType,
@@ -861,7 +1009,8 @@ function buildGalleryGrid(imageArray, container) {
                 size: img.size && img.size !== 'N/A' ? img.size : 'N/A',
                 confidence: img.confidence && img.confidence !== 'N/A' ? img.confidence : 'N/A',
                 lat: img.lat || 0.0,
-                lon: img.lon || 0.0
+                lon: img.lon || 0.0,
+                attribute: img.attribute || '' // NEW: Location attribute
             };
 
             const card = document.createElement('div');
@@ -1018,7 +1167,7 @@ function populateFlightDropdown() {
 function logToTerminal(msg, color="#38BDF8") {
     const terminal = document.getElementById('flightLogTerminal');
     if(!terminal) return;
-    const time = new Date().toLocaleTimeString();
+    const time = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila' });
     terminal.innerHTML += `<span style="color:${color}">[${time}] ${msg}</span><br>`;
     terminal.scrollTop = terminal.scrollHeight;
 }
