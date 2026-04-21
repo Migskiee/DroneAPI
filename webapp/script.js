@@ -231,6 +231,10 @@ function openImagePreview(imgId) {
     const pSize = document.getElementById('previewSize');
     const pSpan = document.getElementById('previewSpan');
     const pDate = document.getElementById('previewDate');
+    
+    const pGpsLink = document.getElementById('gpsMapLink');
+    const pGpsText = document.getElementById('gpsTextDisplay');
+    
     const modal = document.getElementById('imagePreviewModal');
 
     if(pImg) pImg.src = data.url;
@@ -247,6 +251,17 @@ function openImagePreview(imgId) {
     if(pSpan) pSpan.innerText = data.span;
     if(pDate) pDate.innerText = data.date;
 
+    if (data.lat && data.lon && data.lat !== 0.0 && data.lon !== 0.0) {
+        if(pGpsLink) {
+            pGpsLink.style.display = 'inline';
+            pGpsLink.href = `https://maps.google.com/?q=${data.lat},${data.lon}`;
+        }
+        if(pGpsText) pGpsText.innerText = `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}`;
+    } else {
+        if(pGpsLink) pGpsLink.style.display = 'none';
+        if(pGpsText) pGpsText.innerText = "GPS Data Unavailable";
+    }
+
     if(modal) modal.style.display = 'flex';
 }
 
@@ -258,6 +273,8 @@ window.openLivePreview = function(url) {
     const pSize = document.getElementById('previewSize');
     const pSpan = document.getElementById('previewSpan');
     const pDate = document.getElementById('previewDate');
+    const pGpsLink = document.getElementById('gpsMapLink');
+    const pGpsText = document.getElementById('gpsTextDisplay');
     const modal = document.getElementById('imagePreviewModal');
 
     if(pImg) pImg.src = url;
@@ -267,6 +284,9 @@ window.openLivePreview = function(url) {
     if(pSize) pSize.innerText = 'N/A';
     if(pSpan) pSpan.innerText = 'Active Flight Zone';
     if(pDate) pDate.innerText = new Date().toLocaleString();
+    
+    if(pGpsLink) pGpsLink.style.display = 'none';
+    if(pGpsText) pGpsText.innerText = "Syncing live telemetry...";
 
     if(modal) modal.style.display = 'flex';
 };
@@ -824,6 +844,14 @@ function buildGalleryGrid(imageArray, container) {
             
             const dateStr = img.date || img.created_at || img.captured_at ? new Date(img.date || img.created_at || img.captured_at).toLocaleString() : 'Recent Capture';
             
+            // Generate the GPS Text for the Gallery Card
+            let gpsHtml = '';
+            if (img.lat && img.lon && img.lat !== 0.0 && img.lon !== 0.0) {
+                gpsHtml = `<p class="text-muted" style="font-size: 11px; margin-bottom: 5px; font-family: monospace;">📍 ${img.lat.toFixed(5)}, ${img.lon.toFixed(5)}</p>`;
+            } else {
+                gpsHtml = `<p class="text-muted" style="font-size: 11px; margin-bottom: 5px; font-style: italic;">📍 GPS Unavailable</p>`;
+            }
+            
             window.imageMetaData[img.id] = {
                 url: imgSrc,
                 type: defectType,
@@ -831,7 +859,9 @@ function buildGalleryGrid(imageArray, container) {
                 date: dateStr,
                 span: span,
                 size: img.size && img.size !== 'N/A' ? img.size : 'N/A',
-                confidence: img.confidence && img.confidence !== 'N/A' ? img.confidence : 'N/A'
+                confidence: img.confidence && img.confidence !== 'N/A' ? img.confidence : 'N/A',
+                lat: img.lat || 0.0,
+                lon: img.lon || 0.0
             };
 
             const card = document.createElement('div');
@@ -850,7 +880,8 @@ function buildGalleryGrid(imageArray, container) {
                 </div>
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;">${typeHtml}</p>
-                    <p class="text-muted" style="font-size: 11px; margin-bottom: 5px;">🕒 ${dateStr}</p>
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 2px;">🕒 ${dateStr}</p>
+                    ${gpsHtml}
                     ${statusHtml}
                 </div>
             `;
@@ -1024,7 +1055,7 @@ async function fetchLiveCaptures() {
                     <div class="live-capture-card" onclick="openLivePreview('${f.url}')">
                         <span class="health-badge badge-fair" style="position: absolute; top: 5px; right: 5px;">Raw Frame</span>
                         <img src="${f.url}" alt="Raw Capture">
-                        <div class="live-capture-info">Auto-Capture</div>
+                        <div class="live-capture-info">Captured</div>
                     </div>
                 `).join('');
                 
@@ -1034,7 +1065,6 @@ async function fetchLiveCaptures() {
     } catch(e) { console.error("Capture sync error:", e); }
 }
 
-// NEW: Sends the signal to the backend when you click the Manual Capture button
 window.triggerManualCapture = async function() {
     const btn = document.getElementById('manualCaptureBtn');
     if(!btn) return;

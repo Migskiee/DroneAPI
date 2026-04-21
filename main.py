@@ -38,6 +38,8 @@ try:
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS defect_size VARCHAR(50) DEFAULT 'N/A';")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS confidence_score VARCHAR(20) DEFAULT 'N/A';")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS raw_image_url TEXT;")
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;")
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;")
     cursor.execute("UPDATE captured_images SET raw_image_url = image_url WHERE raw_image_url IS NULL AND defect_type = 'Raw Image';")
     conn.commit()
     cursor.close()
@@ -56,7 +58,7 @@ class BulkDeleteParams(BaseModel): image_ids: list[int]
 class MissionStartParams(BaseModel): 
     bridge_id: int
     span_target: str
-    capture_mode: str = "auto" # NEW: Tracks Auto vs Manual
+    capture_mode: str = "auto" 
 
 class AnalyzeParams(BaseModel): 
     mission_id: int
@@ -111,14 +113,24 @@ def upload_raw_worker(mission_id, span_target):
         
         for file in files:
             filepath = os.path.join(TEMP_DIR, file)
+            
+            # Extract GPS from the clever filename encoding
+            try:
+                parts = file.replace('.jpg', '').split('_')
+                lat_val = float(parts[3])
+                lon_val = float(parts[4])
+            except:
+                lat_val = 0.0
+                lon_val = 0.0
+
             try:
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
                 
                 cursor.execute("""
-                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url)
-                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s)
-                """, (mission_id, span_target, secure_url, secure_url))
+                    INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url, latitude, longitude)
+                    VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s, %s, %s)
+                """, (mission_id, span_target, secure_url, secure_url, lat_val, lon_val))
                 conn.commit()
             except Exception as e:
                 print(f"❌ Upload failed for {file}: {e}")
@@ -270,8 +282,15 @@ async def receive_highres_frame(request: Request):
 
     if is_active and m_id is not None:
         frame_bytes = await request.body()
+        
+        # EXTRACT GPS HEADERS FROM DRONE
+        lat = request.headers.get('X-Latitude', '0.0')
+        lon = request.headers.get('X-Longitude', '0.0')
+        
         timestamp = int(time.time() * 1000)
-        filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}.jpg")
+        # Encode GPS into the temp filename so it survives the thread handoff
+        filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}_{lat}_{lon}.jpg")
+        
         with open(filepath, "wb") as f: f.write(frame_bytes)
     return {"status": "received"}
 
@@ -350,7 +369,6 @@ def update_mission_span(params: SpanUpdateParams):
             return {"status": "success"}
         else: raise HTTPException(status_code=400)
 
-# NEW: Receives the "Snap Photo" click from the web app
 @app.post("/api/mission/capture")
 def trigger_manual_capture():
     with state_lock:
@@ -359,16 +377,23 @@ def trigger_manual_capture():
             return {"status": "success"}
     raise HTTPException(status_code=400, detail="Manual mode not active")
 
-# NEW: The Raspberry Pi continuously polls this endpoint to know when to take a picture
 @app.get("/api/mission/poll_capture")
 def poll_capture():
     with state_lock:
         if flight_state["is_active"]:
-            if flight_state["capture_mode"] == "manual" and flight_state["manual_trigger"]:
-                flight_state["manual_trigger"] = False # Reset trigger after reading
-                return {"take_photo": True, "mode": "manual", "span": flight_state["span_target"]}
-            elif flight_state["capture_mode"] == "auto":
-                return {"take_photo": False, "mode": "auto", "span": flight_state["span_target"]}
+            current_mode = flight_state.get("capture_mode", "auto")
+            span = flight_state.get("span_target", "Span 1")
+            
+            if current_mode == "manual":
+                if flight_state["manual_trigger"]:
+                    flight_state["manual_trigger"] = False 
+                    return {"take_photo": True, "mode": "manual", "span": span}
+                else:
+                    return {"take_photo": False, "mode": "manual", "span": span}
+                    
+            elif current_mode == "auto":
+                return {"take_photo": False, "mode": "auto", "span": span}
+                
         return {"take_photo": False, "mode": "none"}
 
 @app.post("/api/mission/analyze")
@@ -438,8 +463,10 @@ def get_bridge_data():
             cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s AND defect_type != 'Raw Image' GROUP BY severity_level", (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
-            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A'} for img in cursor.fetchall()]
+            # PULL LATITUDE AND LONGITUDE FROM DB
+            cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score, latitude, longitude FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
+            
+            image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A', "lat": img[9], "lon": img[10]} for img in cursor.fetchall()]
 
             bridge_list.append({"db_id": bridge_id, "id": b[1], "name": b[2], "location": b[3], "remarks": b[4], "span_count": b[5], "defects": bridge_defects, "images": image_gallery, "missions": bridge_missions})
 
