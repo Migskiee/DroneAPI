@@ -52,10 +52,9 @@
                         <div class="recent-captures-panel">
                             <h3
                                 style="font-size: 16px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px;">
-                                Live Camera Captures (Automated)</h3>
+                                Live Camera Captures</h3>
                             <div id="liveCaptureGallery" class="live-gallery">
-                                <p class="text-muted" style="margin-top: 10px;">Awaiting mission start to begin
-                                    automated capture...</p>
+                                <p class="text-muted" style="margin-top: 10px;">Awaiting mission start to begin capture...</p>
                             </div>
                         </div>
                     </div>
@@ -77,9 +76,20 @@
                         </div>
                         <input type="hidden" id="flightSpanInput" value="">
 
+                        <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 10px; display: block;">Capture Protocol:</label>
+                        <select id="flightCaptureMode" class="form-control" style="font-weight: bold; background-color: #f8fafc; border: 2px solid #cbd5e1;">
+                            <option value="auto">⏱️ Auto-Capture (Every 3s)</option>
+                            <option value="manual">📸 Manual Capture (Pilot Controlled)</option>
+                        </select>
+
                         <button id="toggleMissionBtn" class="btn btn-primary" onclick="toggleFlightMission()"
                             style="background: #10B981; font-size: 16px; padding: 15px; margin-top: 20px;">
                             ▶ START MISSION
+                        </button>
+                        
+                        <button id="manualCaptureBtn" class="btn btn-primary" onclick="triggerManualCapture()"
+                            style="background: #3b82f6; font-size: 16px; padding: 15px; margin-top: 10px; display: none; width: 100%; border: 2px solid #1d4ed8; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+                            📸 SNAP PHOTO NOW
                         </button>
 
                         <div id="aiProgressBarContainer"

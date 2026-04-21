@@ -580,7 +580,7 @@ function showMissionDetails(missionId) {
         if(aiBtn) {
             aiBtn.innerHTML = "🧠 RUN AI ANALYSIS";
             aiBtn.style.background = "#8b5cf6";
-            aiBtn.disabled = false; // FIXED: Ensures the button is always unlocked when opening the view
+            aiBtn.disabled = false; 
         }
     } else {
         if(chartContainer) chartContainer.style.display = 'block';
@@ -591,7 +591,7 @@ function showMissionDetails(missionId) {
         if(aiBtn) {
             aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
             aiBtn.style.background = "#3b82f6"; 
-            aiBtn.disabled = false; // FIXED: Ensures the re-scan button is always unlocked
+            aiBtn.disabled = false; 
         }
     }
 
@@ -662,7 +662,7 @@ window.startAiAnalysis = async function() {
     const imgSizeVal = parseInt(savedSize);
 
     if(btn) {
-        btn.disabled = true; // Locks the button so it can't be clicked twice
+        btn.disabled = true;
         btn.innerHTML = '⚙️ RUNNING YOLO AI...';
         btn.style.background = '#f59e0b';
     }
@@ -701,7 +701,7 @@ window.startAiAnalysis = async function() {
                 if(btn) {
                     btn.innerHTML = '✅ ANALYSIS COMPLETE';
                     btn.style.background = '#10b981';
-                    btn.disabled = false; // FIXED: Safely unlocks the button immediately after completion
+                    btn.disabled = false;
                 }
                 if(progressText) progressText.innerText = 'Database updated successfully!';
                 
@@ -711,7 +711,7 @@ window.startAiAnalysis = async function() {
     } catch (e) {
         console.error("AI Error:", e);
         if(btn) {
-            btn.disabled = false; // FIXED: Also unlocks the button if an error crashes the analysis
+            btn.disabled = false;
             btn.innerHTML = '❌ ERROR. TRY AGAIN.';
             btn.style.background = '#ef4444';
         }
@@ -1034,22 +1034,62 @@ async function fetchLiveCaptures() {
     } catch(e) { console.error("Capture sync error:", e); }
 }
 
+// NEW: Sends the signal to the backend when you click the Manual Capture button
+window.triggerManualCapture = async function() {
+    const btn = document.getElementById('manualCaptureBtn');
+    if(!btn) return;
+    
+    btn.disabled = true;
+    btn.innerText = "📸 SNAP REQUEST SENT...";
+    btn.style.background = "#f59e0b";
+    btn.style.borderColor = "#b45309";
+    
+    try {
+        const res = await fetch('/api/mission/capture', { method: 'POST' });
+        if(res.ok) {
+            logToTerminal(`> 📸 Manual Capture signal transmitted to Drone.`, '#FACC15');
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerText = "📸 SNAP PHOTO NOW";
+                btn.style.background = "#3b82f6";
+                btn.style.borderColor = "#1d4ed8";
+            }, 1500); 
+        }
+    } catch(e) {
+        console.error("Capture trigger failed", e);
+        btn.disabled = false;
+        btn.innerText = "❌ ERROR: RETRY SNAP";
+        btn.style.background = "#ef4444";
+    }
+};
+
 window.toggleFlightMission = async function() {
     const btn = document.getElementById('toggleMissionBtn');
     const bridgeSelect = document.getElementById('flightBridgeSelect');
     const spanInput = document.getElementById('flightSpanInput');
+    const modeSelect = document.getElementById('flightCaptureMode'); 
+    const manualBtn = document.getElementById('manualCaptureBtn'); 
+    
     const progressContainer = document.getElementById('aiProgressBarContainer');
     const progressBar = document.getElementById('aiProgressBar');
     const progressText = document.getElementById('aiProgressText');
 
     if (!isFlightActive) {
         const bridgeId = parseInt(bridgeSelect.value);
+        const captureMode = modeSelect ? modeSelect.value : "auto";
+
         if(isNaN(bridgeId)) return alert("Please select a target bridge from the dropdown.");
         if(!spanInput.value) return alert("Please select a target span.");
 
         try {
             const res = await fetch('/api/mission/start', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bridge_id: bridgeId, span_target: spanInput.value })
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    bridge_id: bridgeId, 
+                    span_target: spanInput.value,
+                    capture_mode: captureMode 
+                })
             });
             const data = await res.json();
             
@@ -1057,22 +1097,34 @@ window.toggleFlightMission = async function() {
                 isFlightActive = true;
                 currentActiveMission = data.mission_id;
                 bridgeSelect.disabled = true;
+                if(modeSelect) modeSelect.disabled = true;
                 
                 if(btn) {
                     btn.innerHTML = '🛑 STOP MISSION & SAVE DATA';
                     btn.style.background = '#EF4444';
                 }
-                logToTerminal(`> MISSION #${data.mission_id} INITIATED. Auto-Capture ARMED.`, '#22C55E');
-                logToTerminal(`> Capturing HD raw photos via secondary pipeline...`, '#FACC15');
-
+                
+                logToTerminal(`> MISSION #${data.mission_id} INITIATED.`, '#22C55E');
+                
                 const lcg = document.getElementById('liveCaptureGallery');
-                if(lcg) lcg.innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first high-res frame from drone...</p>';
+                
+                if(captureMode === "manual") {
+                    logToTerminal(`> 📸 Manual Mode Active. Awaiting Pilot command to capture...`, '#FACC15');
+                    if(manualBtn) manualBtn.style.display = 'block';
+                    if(lcg) lcg.innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting Pilot manual capture command...</p>';
+                } else {
+                    logToTerminal(`> ⏱️ Auto Mode Active. Capturing frames automatically...`, '#FACC15');
+                    if(lcg) lcg.innerHTML = '<p class="text-muted" style="margin-top: 10px;">📸 Awaiting first high-res frame from drone...</p>';
+                }
                 
                 liveCaptureInterval = setInterval(fetchLiveCaptures, 2000);
             }
         } catch (e) { logToTerminal(`> ERROR starting mission: ${e}`, '#EF4444'); }
     } else {
         clearInterval(liveCaptureInterval);
+        
+        if(manualBtn) manualBtn.style.display = 'none'; 
+        
         if(btn) {
             btn.innerHTML = '☁️ UPLOADING TO CLOUD...';
             btn.disabled = true;
@@ -1120,6 +1172,7 @@ window.toggleFlightMission = async function() {
                     fetchDatabaseStats(); 
                     currentActiveMission = null;
                     if(bridgeSelect) bridgeSelect.disabled = false;
+                    if(modeSelect) modeSelect.disabled = false;
                     
                     const lcg = document.getElementById('liveCaptureGallery');
                     if(lcg) lcg.innerHTML = '<p class="text-muted" style="margin-top: 10px;">✅ Mission Saved.</p>';

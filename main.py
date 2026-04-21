@@ -49,10 +49,14 @@ app = FastAPI()
 
 class SeverityUpdate(BaseModel): severity: str
 class RemarkUpdate(BaseModel): remarks: str
-class MissionStartParams(BaseModel): bridge_id: int; span_target: str
 class SpanUpdateParams(BaseModel): span_target: str
 class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str; remarks: str; span_count: int
 class BulkDeleteParams(BaseModel): image_ids: list[int]
+
+class MissionStartParams(BaseModel): 
+    bridge_id: int
+    span_target: str
+    capture_mode: str = "auto" # NEW: Tracks Auto vs Manual
 
 class AnalyzeParams(BaseModel): 
     mission_id: int
@@ -74,6 +78,8 @@ flight_state = {
     "mission_id": None,
     "bridge_id": None,
     "span_target": "Span 1",
+    "capture_mode": "auto",
+    "manual_trigger": False,
     "latest_raw_frame": None,
     "mission_progress": {} 
 }
@@ -315,6 +321,8 @@ def start_mission(params: MissionStartParams):
             flight_state["mission_id"] = m_id
             flight_state["bridge_id"] = params.bridge_id
             flight_state["span_target"] = params.span_target
+            flight_state["capture_mode"] = params.capture_mode
+            flight_state["manual_trigger"] = False
         return {"status": "success", "mission_id": m_id}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
@@ -341,6 +349,27 @@ def update_mission_span(params: SpanUpdateParams):
             flight_state["span_target"] = params.span_target
             return {"status": "success"}
         else: raise HTTPException(status_code=400)
+
+# NEW: Receives the "Snap Photo" click from the web app
+@app.post("/api/mission/capture")
+def trigger_manual_capture():
+    with state_lock:
+        if flight_state["is_active"] and flight_state["capture_mode"] == "manual":
+            flight_state["manual_trigger"] = True
+            return {"status": "success"}
+    raise HTTPException(status_code=400, detail="Manual mode not active")
+
+# NEW: The Raspberry Pi continuously polls this endpoint to know when to take a picture
+@app.get("/api/mission/poll_capture")
+def poll_capture():
+    with state_lock:
+        if flight_state["is_active"]:
+            if flight_state["capture_mode"] == "manual" and flight_state["manual_trigger"]:
+                flight_state["manual_trigger"] = False # Reset trigger after reading
+                return {"take_photo": True, "mode": "manual", "span": flight_state["span_target"]}
+            elif flight_state["capture_mode"] == "auto":
+                return {"take_photo": False, "mode": "auto", "span": flight_state["span_target"]}
+        return {"take_photo": False, "mode": "none"}
 
 @app.post("/api/mission/analyze")
 def trigger_ai_analysis(params: AnalyzeParams):
@@ -449,7 +478,6 @@ def update_bridge_remarks(bridge_id: int, update_data: RemarkUpdate):
         return {"status": "success"}
     except: raise HTTPException(status_code=500)
 
-# NEW: Safely delete a bridge and all its data
 @app.delete("/api/bridges/{bridge_id}")
 def delete_bridge(bridge_id: int):
     try:
