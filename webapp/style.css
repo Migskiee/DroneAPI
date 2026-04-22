@@ -161,23 +161,38 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
     display: none; justify-content: center; align-items: center;
     backdrop-filter: blur(8px);
 }
+
+/* =========================================================
+   UPDATED: RESPONSIVE, SCROLLABLE PREVIEW MODAL
+   ========================================================= */
+
 .preview-modal-container {
     display: flex;
-    width: 1100px;
-    max-width: 95%;
-    height: 650px;
-    max-height: 90%;
-    background: white;
+    width: 80%;
+    max-width: 1000px;
+    max-height: 85vh; /* Limits height to 85% of the screen */
+    background: #fff;
     border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    overflow: hidden; /* Keeps the rounded corners neat */
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
 }
+
 .close-preview {
-    position: absolute; top: 20px; right: 25px; color: #94a3b8;
-    font-size: 35px; cursor: pointer; font-weight: bold;
-    transition: color 0.2s; line-height: 1; z-index: 100;
+    position: absolute; 
+    top: 20px; 
+    right: 25px; 
+    color: #94a3b8;
+    font-size: 35px; 
+    cursor: pointer; 
+    font-weight: bold;
+    transition: color 0.2s; 
+    line-height: 1; 
+    z-index: 100;
 }
-.close-preview:hover { color: #ef4444; }
+
+.close-preview:hover { 
+    color: #ef4444; 
+}
 
 .preview-image-section {
     flex: 2.5;
@@ -186,7 +201,9 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
     justify-content: center;
     align-items: center;
     position: relative;
+    overflow: hidden;
 }
+
 .preview-image-section img {
     width: 100%;
     height: 100%;
@@ -202,7 +219,25 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
     border-left: 1px solid #e2e8f0;
     min-width: 320px;
     position: relative;
+    overflow-y: auto; /* Adds the vertical scrollbar */
 }
+
+/* Custom Scrollbar for Info Section */
+.preview-info-section::-webkit-scrollbar {
+    width: 8px;
+}
+.preview-info-section::-webkit-scrollbar-track {
+    background: #f8fafc; 
+    border-left: 1px solid #e2e8f0;
+}
+.preview-info-section::-webkit-scrollbar-thumb {
+    background: #cbd5e1; 
+    border-radius: 10px;
+}
+.preview-info-section::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8; 
+}
+
 .preview-info-row {
     margin-bottom: 25px;
     display: flex;
