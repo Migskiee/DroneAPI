@@ -557,7 +557,7 @@ function renderBridges(bridges) {
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span class="bridge-id">${bridge.id}</span>
-                <button class="btn btn-primary" onclick="event.stopPropagation(); openBridgeView(${bridge.db_id})" style="padding: 6px 12px; margin: 0; font-size: 13px; background: #3b82f6; border: none;">👁️ View</button>
+                <button class="btn btn-primary" onclick="event.stopPropagation(); openBridgeView(${bridge.db_id})" style="padding: 6px 12px; margin: 0; font-size: 13px; background: #3b82f6; border: none;">View</button>
                 <button class="btn-edit" onclick="event.stopPropagation(); openBridgeModal(${bridge.db_id})">✏️ Edit</button>
                 <button class="btn-edit" onclick="event.stopPropagation(); deleteBridge(${bridge.db_id})" style="color: #ef4444; border-color: #fca5a5;">🗑️ Delete</button>
             </div>
@@ -760,7 +760,7 @@ function showMissionDetails(missionId) {
         if(aiTitle) aiTitle.innerText = "Re-Run AI Analysis";
         if(aiDesc) aiDesc.innerHTML = "Want to scan with different confidence or resolution? Update your <b>Settings</b> and re-scan this flight.";
         if(aiBtn) {
-            aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
+            aiBtn.innerHTML = "RE-SCAN MISSION";
             aiBtn.style.background = "#3b82f6"; 
             aiBtn.disabled = false; 
         }
@@ -980,7 +980,7 @@ function buildGalleryGrid(imageArray, container) {
             let defectSeverity = img.severity || 'Fair';
             
             let topBadge = '';
-            let typeHtml = `<strong style="color: #dc2626;">🚨 Type:</strong> <strong>${defectType}</strong>`;
+            let typeHtml = `<strong style="color: #dc2626;"> Type:</strong> <strong>${defectType}</strong>`;
             let statusHtml = '';
             
             if (defectSeverity === 'Pending') {
@@ -990,14 +990,14 @@ function buildGalleryGrid(imageArray, container) {
             } else if (defectType === 'Raw Image') {
                 topBadge = `<span class="health-badge badge-fair" style="position: absolute; top: 8px; right: 8px;">✅ ANALYZED - SAFE</span>`;
                 typeHtml = `<strong>📸 Capture:</strong> <strong style="color:#10b981;">Clean Structure</strong>`;
-                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">🛡️ Verified by AI</p>`;
+                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">Verified by AI</p>`;
             } else {
                 if (defectSeverity === 'Critical' || defectSeverity === 'High') defectSeverity = 'Bad';
                 if (defectSeverity === 'Review Needed') defectSeverity = 'Poor';
                 
                 let badgeColorClass = defectSeverity === 'Bad' ? 'badge-bad' : (defectSeverity === 'Poor' ? 'badge-poor' : 'badge-fair');
                 topBadge = `<span class="health-badge ${badgeColorClass}" style="position: absolute; top: 8px; right: 8px;">${defectSeverity.toUpperCase()}</span>`;
-                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;">🚨 Defect Logged in Database</p>`;
+                statusHtml = `<p class="text-muted" style="font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; text-align: center;"> Defect Logged in Database</p>`;
             }
             
             let dateStr = 'Recent Capture';
@@ -1055,7 +1055,7 @@ function buildGalleryGrid(imageArray, container) {
                 </div>
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;">${typeHtml}</p>
-                    <p class="text-muted" style="font-size: 11px; margin-bottom: 2px;">🌉 <b>${bName}</b> (${bCode})</p>
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 2px;"><b>${bName}</b> (${bCode})</p>
                     <p class="text-muted" style="font-size: 11px; margin-bottom: 2px;">🕒 ${dateStr}</p>
                     ${gpsHtml}
                     ${statusHtml}
