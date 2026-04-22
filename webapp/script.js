@@ -9,7 +9,7 @@ let liveCaptureInterval = null;
 
 let isDeleteMode = false;
 let selectedForDelete = new Set();
-let currentPreviewImageId = null; // Track which image is open in modal
+let currentPreviewImageId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -240,7 +240,6 @@ window.forceResetMission = async function() {
     }
 };
 
-// NEW: Show/Hide Attribute TextBox
 window.toggleAttributeInput = function() {
     const container = document.getElementById('attributeInputContainer');
     if (container.style.display === 'none') {
@@ -251,7 +250,6 @@ window.toggleAttributeInput = function() {
     }
 };
 
-// NEW: Save Attribute API Call
 window.saveImageAttribute = async function() {
     if (!currentPreviewImageId) return;
     
@@ -272,12 +270,10 @@ window.saveImageAttribute = async function() {
         if (res.ok) {
             btn.innerText = "✅";
             
-            // Update local tracking cache
             if(window.imageMetaData[currentPreviewImageId]) {
                 window.imageMetaData[currentPreviewImageId].attribute = inputVal;
             }
             
-            // Update UI text below the input
             const attrText = document.getElementById('previewAttributeText');
             if (inputVal.trim() !== '') {
                 attrText.innerText = "↳ " + inputVal;
@@ -286,7 +282,6 @@ window.saveImageAttribute = async function() {
                 attrText.style.display = 'none';
             }
             
-            // Hide input box and refresh db stats silently
             setTimeout(() => {
                 document.getElementById('attributeInputContainer').style.display = 'none';
                 btn.innerText = originalText;
@@ -325,7 +320,15 @@ function openImagePreview(imgId) {
     const attrText = document.getElementById('previewAttributeText');
     const attrContainer = document.getElementById('attributeInputContainer');
     
+    // NEW: Bridge Structure DOM Elements
+    const pBridgeName = document.getElementById('previewBridgeName');
+    const pBridgeCode = document.getElementById('previewBridgeCode');
+    
     const modal = document.getElementById('imagePreviewModal');
+
+    // Set Bridge Name and Code
+    if(pBridgeName) pBridgeName.innerText = data.bridgeName;
+    if(pBridgeCode) pBridgeCode.innerText = data.bridgeCode;
 
     if(pImg) pImg.src = data.url;
     if(pType) pType.innerText = data.type;
@@ -341,7 +344,6 @@ function openImagePreview(imgId) {
     if(pSpan) pSpan.innerText = data.span;
     if(pDate) pDate.innerText = data.date;
     
-    // Reset Attribute UI State
     if(attrContainer) attrContainer.style.display = 'none';
     if(attrInput) attrInput.value = data.attribute || '';
     if(attrText) {
@@ -384,6 +386,25 @@ window.openLivePreview = function(url) {
     const attrContainer = document.getElementById('attributeInputContainer');
     const attrBtn = document.getElementById('addAttrBtn');
     
+    // NEW: Bridge Structure DOM Elements
+    const pBridgeName = document.getElementById('previewBridgeName');
+    const pBridgeCode = document.getElementById('previewBridgeCode');
+    const bridgeSelect = document.getElementById('flightBridgeSelect');
+    
+    // Attempt to grab live bridge data for Live mode
+    let liveBName = 'Active Flight Zone';
+    let liveBCode = '';
+    if (bridgeSelect && bridgeSelect.value) {
+        const b = liveBridgeData.find(b => b.db_id === parseInt(bridgeSelect.value));
+        if (b) {
+            liveBName = b.name;
+            liveBCode = b.id;
+        }
+    }
+    
+    if(pBridgeName) pBridgeName.innerText = liveBName;
+    if(pBridgeCode) pBridgeCode.innerText = liveBCode;
+    
     const modal = document.getElementById('imagePreviewModal');
 
     if(pImg) pImg.src = url;
@@ -399,7 +420,6 @@ window.openLivePreview = function(url) {
     if(pGpsLink) pGpsLink.style.display = 'none';
     if(pGpsText) pGpsText.innerText = "Syncing live telemetry...";
     
-    // Hide attribute controls for live previews
     if(attrBtn) attrBtn.style.display = 'none';
     if(attrContainer) attrContainer.style.display = 'none';
     if(attrText) attrText.style.display = 'none';
@@ -415,7 +435,7 @@ window.closeImagePreview = function(event) {
     
     if(modal) modal.style.display = 'none';
     if(pImg) pImg.src = '';
-    if(attrBtn) attrBtn.style.display = 'inline-block'; // reset button visibility
+    if(attrBtn) attrBtn.style.display = 'inline-block'; 
     
     currentPreviewImageId = null;
 };
@@ -939,6 +959,10 @@ function buildGalleryGrid(imageArray, container) {
 
     const sortedSpans = Object.keys(groupedBySpan).sort((a, b) => parseInt(a.replace(/[^\d]/g, '')) - parseInt(b.replace(/[^\d]/g, '')));
 
+    // EXTRACT BRIDGE NAME & CODE GLOBALLY
+    const bName = currentActiveBridge ? currentActiveBridge.name : 'Unknown Structure';
+    const bCode = currentActiveBridge ? currentActiveBridge.id : 'Unknown Code';
+
     sortedSpans.forEach(span => {
         const spanImages = groupedBySpan[span];
         const spanGroup = document.createElement('div');
@@ -999,7 +1023,6 @@ function buildGalleryGrid(imageArray, container) {
                 gpsHtml = `<p class="text-muted" style="font-size: 11px; margin-bottom: 5px; font-style: italic;">📍 GPS Unavailable</p>`;
             }
             
-            // LOAD ALL METADATA
             window.imageMetaData[img.id] = {
                 url: imgSrc,
                 type: defectType,
@@ -1010,7 +1033,9 @@ function buildGalleryGrid(imageArray, container) {
                 confidence: img.confidence && img.confidence !== 'N/A' ? img.confidence : 'N/A',
                 lat: img.lat || 0.0,
                 lon: img.lon || 0.0,
-                attribute: img.attribute || '' // NEW: Location attribute
+                attribute: img.attribute || '',
+                bridgeName: bName, // ADDED
+                bridgeCode: bCode  // ADDED
             };
 
             const card = document.createElement('div');
@@ -1022,6 +1047,7 @@ function buildGalleryGrid(imageArray, container) {
                 handleGalleryClick(e, img.id);
             };
 
+            // ADDED BRIDGE NAME & CODE TO THE SMALL GALLERY CARD HTML
             card.innerHTML = `
                 <div style="position: relative;">
                     ${topBadge}
@@ -1029,6 +1055,7 @@ function buildGalleryGrid(imageArray, container) {
                 </div>
                 <div class="gallery-info">
                     <p style="font-size: 14px; margin-bottom: 6px;">${typeHtml}</p>
+                    <p class="text-muted" style="font-size: 11px; margin-bottom: 2px;">🌉 <b>${bName}</b> (${bCode})</p>
                     <p class="text-muted" style="font-size: 11px; margin-bottom: 2px;">🕒 ${dateStr}</p>
                     ${gpsHtml}
                     ${statusHtml}
