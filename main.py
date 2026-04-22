@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
+from fastapi.middleware.cors import CORSMiddleware
 
 # ==========================================
 # CONFIGURATION
@@ -50,6 +51,17 @@ except Exception as e:
     print(f"Migration note: {e}")
 
 app = FastAPI()
+
+# ==========================================
+# ENABLE CORS FOR ELECTRON DESKTOP APP
+# ==========================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows your local Electron app to connect
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows GET, POST, PUT, DELETE
+    allow_headers=["*"],  # Allows custom headers (like your GPS ones)
+)
 
 class SeverityUpdate(BaseModel): severity: str
 class RemarkUpdate(BaseModel): remarks: str
