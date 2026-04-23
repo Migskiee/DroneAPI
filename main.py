@@ -10,10 +10,11 @@ import requests
 import uvicorn
 import io
 import zipfile
+import glob
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, FileResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
@@ -45,7 +46,7 @@ try:
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS custom_attribute TEXT DEFAULT '';")
     
-    # NEW: Active Learning Columns
+    # Active Learning Columns
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS requires_retraining BOOLEAN DEFAULT FALSE;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS yolo_annotation TEXT DEFAULT '';")
     
@@ -88,7 +89,6 @@ class AnalyzeParams(BaseModel):
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 try:
-    import glob
     available_models = glob.glob('AIModel/*.pt')
     if available_models:
         available_models.sort(reverse=True)
@@ -126,7 +126,6 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
     return "Fair"
 
 def upload_raw_worker(mission_id, span_target):
-    print(f"\n☁️ UPLOADING RAW MISSION DATA: {mission_id}")
     try:
         files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
         total_files = len(files)
@@ -160,7 +159,6 @@ def upload_raw_worker(mission_id, span_target):
             if mission_id in flight_state["mission_progress"]: del flight_state["mission_progress"][mission_id]
 
 def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
-    print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id}")
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
@@ -337,17 +335,14 @@ def poll_capture():
         if flight_state["is_active"]:
             current_mode = flight_state.get("capture_mode", "auto")
             span = flight_state.get("span_target", "Span 1")
-            
             if current_mode == "manual":
                 if flight_state["manual_trigger"]:
                     flight_state["manual_trigger"] = False 
                     return {"take_photo": True, "mode": "manual", "span": span}
                 else:
                     return {"take_photo": False, "mode": "manual", "span": span}
-                    
             elif current_mode == "auto":
                 return {"take_photo": False, "mode": "auto", "span": span}
-                
         return {"take_photo": False, "mode": "none"}
 
 @app.post("/api/mission/analyze")
@@ -368,8 +363,7 @@ def force_reset_mission(mission_id: int):
         cursor = conn.cursor()
         cursor.execute("UPDATE inspection_missions SET status = 'Awaiting Analysis' WHERE id = %s", (mission_id,))
         conn.commit()
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
         with state_lock:
             if mission_id in flight_state["mission_progress"]:
                 del flight_state["mission_progress"][mission_id]
@@ -388,14 +382,12 @@ def get_mission_status(mission_id: int):
         
         status_str = res[0] if res else "Unknown"
         progress = 0; total = 0; processed = 0
-        
         if status_str in ['Processing', 'Saving to Cloud']:
             with state_lock:
                 prog_data = flight_state["mission_progress"].get(mission_id)
                 if prog_data:
                     total = prog_data["total"]; processed = prog_data["processed"]
                     progress = int((processed / total) * 100) if total > 0 else 100
-        
         return {"status": status_str, "progress": progress, "total": total, "processed": processed}
     except: return {"status": "error"}
 
@@ -430,24 +422,21 @@ def save_annotation(image_id: int, payload: AnnotationUpdate):
         return {"status": "success"}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/retraining/dataset")
-def export_yolo_dataset():
-    """Generates a perfect YOLOv8 ZIP file for Google Colab training."""
+@app.post("/api/retraining/push-to-cloud")
+def push_dataset_to_cloud():
+    print("📦 Packing dataset for Cloudinary transfer...")
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-        # Fetch images that have been annotated
         cursor.execute("SELECT id, COALESCE(raw_image_url, image_url), yolo_annotation FROM captured_images WHERE requires_retraining = TRUE AND yolo_annotation != ''")
         dataset_images = cursor.fetchall()
         cursor.close(); conn.close()
 
         if not dataset_images:
-            raise HTTPException(status_code=400, detail="No annotated images available for export.")
+            raise HTTPException(status_code=400, detail="No annotated images available.")
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-            
-            # 1. Create the data.yaml configuration file
             yaml_content = """train: ./images/train
 val: ./images/train
 
@@ -461,29 +450,35 @@ names:
 """
             zip_file.writestr("bridge_dataset/data.yaml", yaml_content)
 
-            # 2. Download and package each image and its .txt file
             for img_id, url, annotation in dataset_images:
                 try:
                     response = requests.get(url, timeout=5)
                     if response.status_code == 200:
-                        # Write the Image file
-                        img_filename = f"bridge_dataset/images/train/img_{img_id}.jpg"
-                        zip_file.writestr(img_filename, response.content)
-                        
-                        # Write the matching YOLO Text file
-                        txt_filename = f"bridge_dataset/labels/train/img_{img_id}.txt"
-                        zip_file.writestr(txt_filename, annotation)
+                        zip_file.writestr(f"bridge_dataset/images/train/img_{img_id}.jpg", response.content)
+                        zip_file.writestr(f"bridge_dataset/labels/train/img_{img_id}.txt", annotation)
                 except Exception as e:
-                    print(f"Skipped {img_id} during export: {e}")
+                    print(f"Skipped {img_id}: {e}")
 
         zip_buffer.seek(0)
-        return StreamingResponse(
-            zip_buffer, 
-            media_type="application/x-zip-compressed", 
-            headers={"Content-Disposition": "attachment; filename=bridge_dataset.zip"}
+        upload_result = cloudinary.uploader.upload(
+            zip_buffer, resource_type="raw", folder="bridge_datasets",
+            public_id=f"dataset_{int(time.time())}.zip"
         )
+        secure_url = upload_result['secure_url']
+        
+        with state_lock: flight_state["latest_dataset_url"] = secure_url
+        print(f"✅ Dataset safely stored in cloud: {secure_url}")
+        return {"status": "success", "url": secure_url}
+
     except Exception as e:
+        print(f"❌ Failed to push dataset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/retraining/latest-dataset")
+def get_latest_dataset_url():
+    with state_lock: url = flight_state.get("latest_dataset_url")
+    if not url: raise HTTPException(status_code=404, detail="No dataset pushed yet.")
+    return {"status": "success", "url": url}
 
 @app.get("/api/retraining/flagged")
 def get_flagged_images():
@@ -495,6 +490,24 @@ def get_flagged_images():
         cursor.close(); conn.close()
         return {"status": "success", "images": flagged}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# NEW: COLAB MODEL DOWNLOAD ENDPOINT
+# ==========================================
+@app.get("/api/model/download-latest")
+def download_latest_model():
+    """Serves the most recent .pt model file directly to Google Colab."""
+    try:
+        available_models = glob.glob('AIModel/*.pt')
+        if not available_models:
+            raise HTTPException(status_code=404, detail="No YOLO model found in AIModel folder.")
+            
+        available_models.sort(reverse=True)
+        latest = available_models[0]
+        print(f"☁️ Colab requested current brain. Serving {latest}...")
+        return FileResponse(latest, filename=os.path.basename(latest))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # DATABASE CRUD ENDPOINTS 
@@ -593,18 +606,13 @@ def delete_bridge(bridge_id: int):
 @app.post("/api/images/bulk-delete")
 def bulk_delete_images(params: BulkDeleteParams):
     try:
-        if not params.image_ids:
-            return {"status": "success"}
-            
+        if not params.image_ids: return {"status": "success"}
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
         format_strings = ','.join(['%s'] * len(params.image_ids))
         query = f"DELETE FROM captured_images WHERE id IN ({format_strings})"
-        
         cursor.execute(query, tuple(params.image_ids))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        conn.commit(); cursor.close(); conn.close()
         return {"status": "success"}
     except Exception as e: 
         raise HTTPException(status_code=500, detail=str(e))

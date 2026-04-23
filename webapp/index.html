@@ -27,7 +27,6 @@
 
             <section id="live-flight" class="content-section" style="display:block;">
                 <h2 class="section-title">GCS: LIVE FLIGHT TELEMETRY</h2>
-
                 <div style="display: flex; gap: 20px;">
                     <div style="flex: 2; display: flex; flex-direction: column; gap: 15px;">
 
@@ -123,22 +122,18 @@
                     </div>
                     <div class="analytics-details-panel">
                         <h3>Health Condition Breakdown</h3>
-                        <p class="text-muted">Current structural condition of registered bridges based on their most
-                            recent flight mission.</p>
+                        <p class="text-muted">Current structural condition of registered bridges based on their most recent flight mission.</p>
                         <ul class="condition-list stats-list">
                             <li>
-                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Bad (Critical
-                                        Repair Needed)</strong></div>
+                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Bad (Critical Repair Needed)</strong></div>
                                 <span class="stat-value" id="countHigh">0</span>
                             </li>
                             <li>
-                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Poor (Requires
-                                        Maintenance)</strong></div>
+                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Poor (Requires Maintenance)</strong></div>
                                 <span class="stat-value" id="countReview">0</span>
                             </li>
                             <li>
-                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Fair / Good
-                                        (Safe)</strong></div>
+                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Fair / Good (Safe)</strong></div>
                                 <span class="stat-value" id="countLow">0</span>
                             </li>
                         </ul>
@@ -157,18 +152,15 @@
                     <div class="bridge-header-bar">
                         <h2 class="section-title">BRIDGE DATABASE</h2>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="text" id="bridgeSearch" class="search-input"
-                                placeholder="Search by name or location...">
-                            <button class="btn btn-primary" onclick="openBridgeModal()"
-                                style="padding: 10px 15px; font-size: 14px;">➕ Add New Bridge</button>
+                            <input type="text" id="bridgeSearch" class="search-input" placeholder="Search by name or location...">
+                            <button class="btn btn-primary" onclick="openBridgeModal()" style="padding: 10px 15px; font-size: 14px;">➕ Add New Bridge</button>
                         </div>
                     </div>
                     <div class="bridge-grid" id="bridgeGrid"></div>
                 </div>
 
                 <div id="bridgeDetailView" style="display:none;">
-                    <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to
-                        Database</button>
+                    <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to Database</button>
                     <div class="detail-header">
                         <h2 id="detailName">Loading...</h2>
                         <p id="detailLocation" class="text-muted">Loading...</p>
@@ -176,33 +168,26 @@
                     </div>
 
                     <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
-
                         <div class="bridge-overview-row">
                             <div class="detail-analytics chart-section">
                                 <h3>Latest Mission Defect Distribution</h3>
-                                <p class="text-muted" id="latestMissionChartDesc">Defect breakdown from the most recent
-                                    flight.</p>
+                                <p class="text-muted" id="latestMissionChartDesc">Defect breakdown from the most recent flight.</p>
                                 <div class="chart-container">
                                     <canvas id="defectChart"></canvas>
                                 </div>
                             </div>
-
                             <div class="detail-analytics remarks-section">
                                 <h3>Structure Condition & Remarks</h3>
                                 <div id="bridgeConditionBadge" class="status-badge">Loading...</div>
-                                <p class="text-muted" style="margin-bottom: 5px; font-size: 13px;">Engineering Remarks:
-                                </p>
-                                <textarea id="bridgeRemarks" class="form-control" rows="6"
-                                    placeholder="Loading remarks..."></textarea>
-                                <button class="btn btn-primary" style="margin-top: 15px; width: 100%;"
-                                    onclick="saveBridgeRemarks()">💾 Save Remarks</button>
+                                <p class="text-muted" style="margin-bottom: 5px; font-size: 13px;">Engineering Remarks:</p>
+                                <textarea id="bridgeRemarks" class="form-control" rows="6" placeholder="Loading remarks..."></textarea>
+                                <button class="btn btn-primary" style="margin-top: 15px; width: 100%;" onclick="saveBridgeRemarks()">💾 Save Remarks</button>
                             </div>
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
                             <h3>Historical Flight Mission Logs</h3>
-                            <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to
-                                view its captured telemetry and images.</p>
+                            <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
                             <div id="missionListGrid" class="mission-grid"></div>
                         </div>
                     </div>
@@ -248,8 +233,7 @@
                             <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
                                 <div>
                                     <h3>Inspection Image Gallery</h3>
-                                    <p class="text-muted" style="margin-bottom: 0;">Separated by detected defects and
-                                        raw/safe captures.</p>
+                                    <p class="text-muted" style="margin-bottom: 0;">Separated by detected defects and raw/safe captures.</p>
                                 </div>
                                 <div style="display: flex; gap: 15px; align-items: center;">
                                     <div id="deleteControls" style="display: flex; align-items: center; gap: 10px;">
@@ -265,8 +249,7 @@
                                         </div>
                                     </div>
                                     <div class="gallery-filters">
-                                        <select id="filterType" class="form-control filter-select"
-                                            onchange="applyGalleryFilters()">
+                                        <select id="filterType" class="form-control filter-select" onchange="applyGalleryFilters()">
                                             <option value="all">All Images</option>
                                             <option value="Raw Image">Raw / Safe Images</option>
                                             <option value="Chipping">Chipping</option>
@@ -289,7 +272,6 @@
                             </div>
                             <div id="galleryContainerRaw"></div>
                         </div>
-
                     </div>
                 </div>
             </section>
@@ -301,7 +283,7 @@
                         <p class="text-muted" style="margin-top: 0;">Annotate flagged images to create a new YOLO dataset for continuous learning.</p>
                     </div>
                     <button class="btn btn-primary" onclick="exportYoloDataset()" style="background: #8b5cf6; padding: 12px 20px; font-size: 14px; font-weight: bold;">
-                        📦 Export YOLO Dataset (.zip)
+                        ☁️ Push Dataset to Cloud
                     </button>
                 </div>
                 

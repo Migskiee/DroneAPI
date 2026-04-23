@@ -20,11 +20,11 @@ let flaggedImagesData = [];
 let currentAnnotationImageId = null;
 let isDrawing = false;
 let startX = 0; let startY = 0;
-let currentRect = null; // {x, y, w, h} in canvas coordinates
+let currentRect = null; 
 const canvas = document.getElementById('annotationCanvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let bgImage = new Image();
-bgImage.crossOrigin = "Anonymous"; // Required to draw cloud images
+bgImage.crossOrigin = "Anonymous"; 
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(targetId).style.display = 'block';
             
             if (targetId === 'bridges') showBridgeList();
-            if (targetId === 'retraining') loadRetrainingHub(); // NEW: Load Hub
+            if (targetId === 'retraining') loadRetrainingHub(); 
             
             navLinks.forEach(l => l.classList.remove('active'));
             this.classList.add('active');
@@ -101,7 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (sizeSelect) sizeSelect.value = savedSize;
 
-    // Set up canvas mouse events
     if(canvas) {
         canvas.addEventListener('mousedown', startDrawing);
         canvas.addEventListener('mousemove', draw);
@@ -113,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================
-// ACTIVE LEARNING FUNCTIONS (NEW)
+// ACTIVE LEARNING FUNCTIONS
 // =========================================
 
 window.flagImageForRetraining = async function() {
@@ -187,16 +186,14 @@ function loadCanvasImage(imgData) {
     badge.innerText = imgData.annotation ? "✅ Annotated" : "🚨 Draw Box";
     badge.className = imgData.annotation ? "health-badge badge-fair" : "health-badge badge-bad";
     
-    renderFlaggedGrid(); // Refresh border highlight
+    renderFlaggedGrid(); 
 
     bgImage.onload = () => {
         canvas.style.display = 'block';
-        // Match canvas logical size to image actual size
         canvas.width = bgImage.width;
         canvas.height = bgImage.height;
         ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
         
-        // If they already drew a box, parse it and render it
         if(imgData.annotation) {
             const parts = imgData.annotation.split(' ');
             if (parts.length === 5) {
@@ -206,7 +203,7 @@ function loadCanvasImage(imgData) {
                 const w = parseFloat(parts[3]) * canvas.width;
                 const h = parseFloat(parts[4]) * canvas.height;
                 currentRect = { x: cx - w/2, y: cy - h/2, w: w, h: h };
-                draw(); // redraws with the box
+                draw(); 
             }
         }
     };
@@ -216,20 +213,17 @@ function loadCanvasImage(imgData) {
 function startDrawing(e) {
     if (!currentAnnotationImageId) return;
     const rect = canvas.getBoundingClientRect();
-    // Scale mouse coordinates to match canvas internal resolution
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     
     startX = (e.clientX - rect.left) * scaleX;
     startY = (e.clientY - rect.top) * scaleY;
     isDrawing = true;
-    currentRect = null; // Clear previous
+    currentRect = null; 
 }
 
 function draw(e) {
     if (!currentAnnotationImageId) return;
-    
-    // Always clear and redraw base image
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
     
@@ -249,10 +243,10 @@ function draw(e) {
     }
     
     if (currentRect) {
-        ctx.strokeStyle = '#ef4444'; // Red bounding box
+        ctx.strokeStyle = '#ef4444'; 
         ctx.lineWidth = 4;
         ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; // Translucent fill
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; 
         ctx.fillRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
     }
 }
@@ -270,15 +264,12 @@ window.saveAnnotation = async function() {
     if (!currentAnnotationImageId) return alert("Select an image first.");
     if (!currentRect) return alert("Draw a bounding box around the defect first.");
 
-    // Calculate YOLO Normalized Coordinates
     const x_center = (currentRect.x + currentRect.w / 2) / canvas.width;
     const y_center = (currentRect.y + currentRect.h / 2) / canvas.height;
     const width = currentRect.w / canvas.width;
     const height = currentRect.h / canvas.height;
     
     const class_id = document.getElementById('annotationClassSelect').value;
-    
-    // Format: "class_id x_center y_center width height"
     const yoloString = `${class_id} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
 
     try {
@@ -290,7 +281,6 @@ window.saveAnnotation = async function() {
         if (res.ok) {
             document.getElementById('annotationStatus').innerText = "✅ Saved!";
             document.getElementById('annotationStatus').className = "health-badge badge-fair";
-            // Update local memory so the grid updates
             const img = flaggedImagesData.find(i => i.id === currentAnnotationImageId);
             if (img) img.annotation = yoloString;
             renderFlaggedGrid();
@@ -301,13 +291,41 @@ window.saveAnnotation = async function() {
     }
 };
 
-window.exportYoloDataset = function() {
-    // Check if there's actually anything ready
+window.exportYoloDataset = async function() {
     const readyCount = flaggedImagesData.filter(i => i.annotation && i.annotation !== '').length;
     if (readyCount === 0) return alert("You need to draw boxes and save at least one image before exporting!");
     
-    // Browser automatically downloads the ZIP stream
-    window.location.href = `${BASE_URL}/api/retraining/dataset`;
+    const btn = document.querySelector('#retraining .btn-primary');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "⏳ Compiling & Sending to Cloud...";
+    btn.disabled = true;
+    btn.style.background = "#f59e0b";
+
+    try {
+        const res = await fetch(`${BASE_URL}/api/retraining/push-to-cloud`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (res.ok && data.status === 'success') {
+            btn.innerHTML = "✅ Dataset Sent to Cloud!";
+            btn.style.background = "#10b981";
+            alert("Success! The dataset has been securely transferred to the cloud. You can now open Google Colab and click 'Run'.");
+        } else {
+            alert("Failed to send dataset to cloud.");
+            btn.innerHTML = originalText;
+            btn.style.background = "#8b5cf6";
+        }
+    } catch(e) {
+        console.error("Upload error:", e);
+        alert("Network error while pushing dataset.");
+        btn.innerHTML = originalText;
+        btn.style.background = "#8b5cf6";
+    } finally {
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = "☁️ Push Dataset to Cloud";
+            btn.style.background = "#8b5cf6";
+        }, 3000);
+    }
 };
 
 // =========================================
@@ -524,7 +542,6 @@ function openImagePreview(imgId) {
     const pBridgeName = document.getElementById('previewBridgeName');
     const pBridgeCode = document.getElementById('previewBridgeCode');
     
-    // Reset flag button text
     const flagBtn = document.getElementById('flagRetrainBtn');
     if (flagBtn) {
         flagBtn.innerText = '🚩 AI Missed Something (Flag)';
@@ -599,7 +616,7 @@ window.openLivePreview = function(url) {
     const bridgeSelect = document.getElementById('flightBridgeSelect');
     const flagBtn = document.getElementById('flagRetrainBtn');
     
-    if (flagBtn) flagBtn.style.display = 'none'; // Cant flag raw un-analyzed frames
+    if (flagBtn) flagBtn.style.display = 'none'; 
     
     let liveBName = 'Active Flight Zone';
     let liveBCode = '';
