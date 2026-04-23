@@ -358,7 +358,7 @@ function openImagePreview(imgId) {
     if (data.lat && data.lon && data.lat !== 0.0 && data.lon !== 0.0) {
         if(pGpsLink) {
             pGpsLink.style.display = 'inline';
-            pGpsLink.href = `http://googleusercontent.com/maps.google.com/maps?q=${data.lat},${data.lon}`;
+            pGpsLink.href = `https://www.google.com/maps?q=${data.lat},${data.lon}`;
         }
         if(pGpsText) pGpsText.innerText = `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}`;
     } else {
