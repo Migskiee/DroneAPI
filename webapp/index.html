@@ -17,6 +17,7 @@
                     LIVE FLIGHT</a></li>
             <li><a href="#" class="nav-link" data-target="analytics">SYSTEM ANALYTICS</a></li>
             <li><a href="#" class="nav-link" data-target="bridges">BRIDGE DATABASE</a></li>
+            <li><a href="#" class="nav-link" data-target="retraining" style="color: #8b5cf6; font-weight: bold; margin-top: 10px;">🧠 AI RETRAINING HUB</a></li>
             <li><a href="#" class="nav-link" data-target="settings" style="color: #64748B; font-weight: bold; margin-top: 20px; border-top: 1px solid #e2e8f0;">⚙️ SETTINGS</a></li>
         </ul>
     </div>
@@ -32,7 +33,7 @@
 
                         <div
                             style="background: #0F172A; border-radius: 8px; overflow: hidden; border: 2px solid #334155; position: relative; min-height: 480px; display: flex; justify-content: center; align-items: center;">
-                            <img id="liveVideoStream" src="/video_feed"
+                            <img id="liveVideoStream" src="https://dronebridgeanalytics.up.railway.app/video_feed"
                                 style="width: 100%; height: 100%; object-fit: contain; display: block;"
                                 alt="Live Stream">
 
@@ -293,6 +294,53 @@
                 </div>
             </section>
 
+            <section id="retraining" class="content-section" style="display:none;">
+                <div class="bridge-header-bar">
+                    <div>
+                        <h2 class="section-title" style="margin-bottom: 5px; color: #8b5cf6;">🧠 AI RETRAINING HUB</h2>
+                        <p class="text-muted" style="margin-top: 0;">Annotate flagged images to create a new YOLO dataset for continuous learning.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="exportYoloDataset()" style="background: #8b5cf6; padding: 12px 20px; font-size: 14px; font-weight: bold;">
+                        📦 Export YOLO Dataset (.zip)
+                    </button>
+                </div>
+                
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); height: 70vh; overflow-y: auto;">
+                        <h3 style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 15px;">Flagged Captures</h3>
+                        <p id="retrainEmptyMsg" class="text-muted" style="font-size: 13px;">No images currently flagged. Flag false positives in the Database.</p>
+                        <div id="retrainImageGrid" style="display: grid; grid-template-columns: 1fr; gap: 15px;"></div>
+                    </div>
+
+                    <div style="flex: 3; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <select id="annotationClassSelect" class="form-control" style="width: 250px; font-weight: bold; background: #f8fafc;">
+                                    <option value="0">Crack</option>
+                                    <option value="1">Flaking</option>
+                                    <option value="2">Chipping</option>
+                                    <option value="3">Exposed Rebar</option>
+                                    <option value="4">Water Infiltration</option>
+                                </select>
+                                <span id="annotationStatus" class="health-badge badge-pending" style="font-size: 13px;">Select an Image</span>
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-secondary" onclick="clearAnnotationCanvas()" style="margin: 0;">🗑️ Clear Box</button>
+                                <button class="btn btn-primary" onclick="saveAnnotation()" style="margin: 0; background: #10b981;">💾 Save Annotation</button>
+                            </div>
+                        </div>
+
+                        <div id="canvasContainer" style="flex: 1; background: #020617; border-radius: 8px; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; border: 2px solid #334155;">
+                            <p id="canvasPlaceholder" style="color: #64748b; font-weight: bold;">Click an image on the left to begin annotating.</p>
+                            <canvas id="annotationCanvas" style="display: none; cursor: crosshair; max-width: 100%; max-height: 100%;"></canvas>
+                        </div>
+                        <p class="text-muted" style="margin-top: 10px; font-size: 12px; text-align: center;">Click and drag on the image to draw a bounding box around the exact defect.</p>
+                        
+                    </div>
+                </div>
+            </section>
+
             <section id="settings" class="content-section" style="display:none;">
                 <h2 class="section-title">SYSTEM SETTINGS</h2>
                 
@@ -360,6 +408,10 @@
                 <span class="close-preview" onclick="closeImagePreview(event)">×</span>
                 <h3 style="color: #0f172a; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; padding-right: 30px;">Analysis Details</h3>
                 
+                <button id="flagRetrainBtn" class="btn btn-primary" style="background: #8b5cf6; width: 100%; margin-bottom: 25px; font-weight: bold; border: 2px solid #7c3aed;" onclick="flagImageForRetraining()">
+                    🚩 AI Missed Something (Flag)
+                </button>
+
                 <div class="preview-info-row">
                     <span class="preview-info-label">Bridge Name</span>
                     <span class="preview-info-value" id="previewBridgeName" style="font-weight: bold; color: #1e293b;">Loading...</span>

@@ -8,10 +8,12 @@ import cloudinary
 import cloudinary.uploader
 import requests
 import uvicorn
+import io
+import zipfile
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
@@ -41,8 +43,12 @@ try:
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS raw_image_url TEXT;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;")
-    # NEW: Add the custom attribute column for the location notes
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS custom_attribute TEXT DEFAULT '';")
+    
+    # NEW: Active Learning Columns
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS requires_retraining BOOLEAN DEFAULT FALSE;")
+    cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS yolo_annotation TEXT DEFAULT '';")
+    
     cursor.execute("UPDATE captured_images SET raw_image_url = image_url WHERE raw_image_url IS NULL AND defect_type = 'Raw Image';")
     conn.commit()
     cursor.close()
@@ -52,15 +58,12 @@ except Exception as e:
 
 app = FastAPI()
 
-# ==========================================
-# ENABLE CORS FOR ELECTRON DESKTOP APP
-# ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows your local Electron app to connect
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],  # Allows GET, POST, PUT, DELETE
-    allow_headers=["*"],  # Allows custom headers (like your GPS ones)
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 class SeverityUpdate(BaseModel): severity: str
@@ -68,8 +71,8 @@ class RemarkUpdate(BaseModel): remarks: str
 class SpanUpdateParams(BaseModel): span_target: str
 class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str; remarks: str; span_count: int
 class BulkDeleteParams(BaseModel): image_ids: list[int]
-# NEW: Data model for saving the attribute
 class AttributeUpdate(BaseModel): custom_attribute: str
+class AnnotationUpdate(BaseModel): yolo_annotation: str
 
 class MissionStartParams(BaseModel): 
     bridge_id: int
@@ -85,10 +88,18 @@ class AnalyzeParams(BaseModel):
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 try:
-    model = YOLO('AIModel/AIModelFinalV4.pt')
-    print("YOLO Model Loaded Successfully!")
+    import glob
+    available_models = glob.glob('AIModel/*.pt')
+    if available_models:
+        available_models.sort(reverse=True)
+        latest_model = available_models[0]
+        print(f"🔄 Auto-detecting AI... Loading newest weights: {latest_model}")
+        model = YOLO(latest_model)
+        print("✅ YOLO Model Loaded Successfully!")
+    else:
+        model = YOLO('AIModel/AIModelFinalV4.pt')
 except Exception as e:
-    print(f"Warning: YOLO Model not found or failed to load. {e}")
+    print(f"⚠️ Warning: YOLO Model failed to load. {e}")
     model = None
 
 flight_state = {
@@ -114,123 +125,79 @@ def assess_defect_severity(defect_type, w_mm, h_mm):
     elif "water" in dt or "infiltration" in dt: return "Bad" if max_dim >= 300 else "Poor"
     return "Fair"
 
-# --- PHASE 1: RAW UPLOAD WORKER ---
 def upload_raw_worker(mission_id, span_target):
     print(f"\n☁️ UPLOADING RAW MISSION DATA: {mission_id}")
     try:
         files = sorted([f for f in os.listdir(TEMP_DIR) if f.startswith(f"mission_{mission_id}")])
         total_files = len(files)
-        
-        with state_lock:
-            flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
-
+        with state_lock: flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-        
         for file in files:
             filepath = os.path.join(TEMP_DIR, file)
-            
             try:
                 parts = file.replace('.jpg', '').split('_')
-                lat_val = float(parts[3])
-                lon_val = float(parts[4])
+                lat_val = float(parts[3]); lon_val = float(parts[4])
             except:
-                lat_val = 0.0
-                lon_val = 0.0
-
+                lat_val = 0.0; lon_val = 0.0
             try:
                 upload_result = cloudinary.uploader.upload(filepath, folder="bridge_raw_captures")
                 secure_url = upload_result['secure_url']
-                
                 cursor.execute("""
                     INSERT INTO captured_images (mission_id, span_target, image_url, defect_type, severity_level, defect_size, confidence_score, raw_image_url, latitude, longitude, custom_attribute)
                     VALUES (%s, %s, %s, 'Raw Image', 'Pending', 'N/A', 'N/A', %s, %s, %s, '')
                 """, (mission_id, span_target, secure_url, secure_url, lat_val, lon_val))
                 conn.commit()
-            except Exception as e:
-                print(f"❌ Upload failed for {file}: {e}")
+            except Exception as e: print(f"❌ Upload failed: {e}")
             finally:
                 if os.path.exists(filepath): os.remove(filepath)
-                
-            with state_lock:
-                flight_state["mission_progress"][mission_id]["processed"] += 1
-
+            with state_lock: flight_state["mission_progress"][mission_id]["processed"] += 1
         cursor.execute("UPDATE inspection_missions SET status = 'Awaiting Analysis' WHERE id = %s", (mission_id,))
-        conn.commit()
-        cursor.close(); conn.close()
-        print(f"✅ RAW DATA SAVED FOR MISSION {mission_id}")
-        
-    except Exception as e:
-        print(f"❌ Raw Upload Crash: {e}")
+        conn.commit(); cursor.close(); conn.close()
+    except Exception as e: print(f"❌ Raw Upload Crash: {e}")
     finally:
         with state_lock:
-            if mission_id in flight_state["mission_progress"]:
-                del flight_state["mission_progress"][mission_id]
+            if mission_id in flight_state["mission_progress"]: del flight_state["mission_progress"][mission_id]
 
-# --- PHASE 2: AI ANALYSIS WORKER ---
 def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
-    print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id} [Conf: {conf_threshold}, Size: {img_size}]")
+    print(f"\n🧠 STARTING AI ANALYSIS ON MISSION {mission_id}")
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
-        
         cursor.execute("SELECT id, COALESCE(raw_image_url, image_url), span_target FROM captured_images WHERE mission_id = %s", (mission_id,))
         raw_images = cursor.fetchall()
-        
-        total_files = len(raw_images)
-        with state_lock:
-            flight_state["mission_progress"][mission_id] = {"total": total_files, "processed": 0}
-
+        with state_lock: flight_state["mission_progress"][mission_id] = {"total": len(raw_images), "processed": 0}
         MM_PER_PIXEL = 0.2
-        
         for img_id, image_url, span_target in raw_images:
             try:
                 resp = requests.get(image_url)
                 image_array = np.asarray(bytearray(resp.content), dtype=np.uint8)
                 frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-                
                 has_new_defect = False
-                
                 if frame is not None and model is not None:
                     results = model.predict(frame, conf=conf_threshold, imgsz=img_size, verbose=False)
                     boxes = results[0].boxes
-                    
                     if boxes is not None and len(boxes) > 0:
                         has_new_defect = True
                         capture_frame = frame.copy()
-                        
-                        all_types = []
-                        all_confs = []
-                        all_sizes = []
-                        all_severities = []
-                        
+                        all_types = []; all_confs = []; all_sizes = []; all_severities = []
                         for i in range(len(boxes)):
                             x1, y1, x2, y2 = boxes.xyxy[i].cpu().tolist()
                             cls_id = int(boxes.cls[i].item())
-                            
                             conf = float(boxes.conf[i].item())
                             conf_str = f"{int(conf * 100)}%"
-                            
                             width_mm = (x2 - x1) * MM_PER_PIXEL
                             height_mm = (y2 - y1) * MM_PER_PIXEL
                             defect_type = model.names[cls_id].replace("_", " ").title()
                             severity = assess_defect_severity(defect_type, width_mm, height_mm)
-                            
                             size_str = f"{width_mm:.1f}x{height_mm:.1f}mm"
-                            
-                            all_types.append(defect_type)
-                            all_confs.append(conf_str)
-                            all_sizes.append(size_str)
-                            all_severities.append(severity)
+                            all_types.append(defect_type); all_confs.append(conf_str); all_sizes.append(size_str); all_severities.append(severity)
                             
                             box_color = (0, 0, 255) if severity == "Bad" else (0, 165, 255) if severity == "Poor" else (0, 255, 0)
                             cv2.rectangle(capture_frame, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
-                            
                             label_text = f"{defect_type} ({conf_str}) [{severity}]"
                             text_size, _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
-                            text_w, text_h = text_size
-                            
-                            cv2.rectangle(capture_frame, (int(x1), int(y1) - text_h - 10), (int(x1) + text_w, int(y1)), box_color, -1)
+                            cv2.rectangle(capture_frame, (int(x1), int(y1) - text_size[1] - 10), (int(x1) + text_size[0], int(y1)), box_color, -1)
                             cv2.putText(capture_frame, label_text, (int(x1), int(y1) - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                             
                         tmp_path = f"annotated_{img_id}.jpg"
@@ -238,53 +205,30 @@ def analyze_mission_worker(mission_id, conf_threshold=0.5, img_size=640):
                         try:
                             upload_result = cloudinary.uploader.upload(tmp_path, folder="bridge_inspections")
                             new_url = upload_result['secure_url']
-                            
                             final_defect_types = ", ".join(list(dict.fromkeys(all_types))) 
                             final_sizes = " | ".join(all_sizes)
                             final_confs = " | ".join(all_confs)
-                            
-                            if "Bad" in all_severities:
-                                final_severity = "Bad"
-                            elif "Poor" in all_severities:
-                                final_severity = "Poor"
-                            else:
-                                final_severity = "Fair"
-                            
+                            final_severity = "Bad" if "Bad" in all_severities else "Poor" if "Poor" in all_severities else "Fair"
                             cursor.execute("""
-                                UPDATE captured_images 
-                                SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s, confidence_score = %s
-                                WHERE id = %s
+                                UPDATE captured_images SET image_url = %s, defect_type = %s, severity_level = %s, defect_size = %s, confidence_score = %s WHERE id = %s
                             """, (new_url, final_defect_types, final_severity, final_sizes, final_confs, img_id))
                             conn.commit()
                         finally:
                             if os.path.exists(tmp_path): os.remove(tmp_path)
-                            
                 if not has_new_defect:
                     cursor.execute("""
-                        UPDATE captured_images 
-                        SET image_url = COALESCE(raw_image_url, image_url), defect_type = 'Raw Image', severity_level = 'Fair', defect_size = 'N/A', confidence_score = 'N/A' 
-                        WHERE id = %s
+                        UPDATE captured_images SET image_url = COALESCE(raw_image_url, image_url), defect_type = 'Raw Image', severity_level = 'Fair', defect_size = 'N/A', confidence_score = 'N/A' WHERE id = %s
                     """, (img_id,))
                     conn.commit()
-                    
-            except Exception as e:
-                print(f"❌ Error processing image {img_id}: {e}")
-                
+            except Exception as e: print(f"❌ Error processing image {img_id}: {e}")
             time.sleep(0.1) 
-            with state_lock:
-                flight_state["mission_progress"][mission_id]["processed"] += 1
-                
+            with state_lock: flight_state["mission_progress"][mission_id]["processed"] += 1
         cursor.execute("UPDATE inspection_missions SET status = 'Completed' WHERE id = %s", (mission_id,))
-        conn.commit()
-        cursor.close(); conn.close()
-        print(f"✅ AI ANALYSIS COMPLETE FOR MISSION {mission_id}")
-        
-    except Exception as e:
-        print(f"❌ AI Processor Background Crash: {e}")
+        conn.commit(); cursor.close(); conn.close()
+    except Exception as e: print(f"❌ AI Processor Crash: {e}")
     finally:
         with state_lock:
-            if mission_id in flight_state["mission_progress"]:
-                del flight_state["mission_progress"][mission_id]
+            if mission_id in flight_state["mission_progress"]: del flight_state["mission_progress"][mission_id]
 
 # ==========================================
 # UPLINK AND DOWNLINK
@@ -297,13 +241,10 @@ async def receive_highres_frame(request: Request):
 
     if is_active and m_id is not None:
         frame_bytes = await request.body()
-        
         lat = request.headers.get('X-Latitude', '0.0')
         lon = request.headers.get('X-Longitude', '0.0')
-        
         timestamp = int(time.time() * 1000)
         filepath = os.path.join(TEMP_DIR, f"mission_{m_id}_{timestamp}_{lat}_{lon}.jpg")
-        
         with open(filepath, "wb") as f: f.write(frame_bytes)
     return {"status": "received"}
 
@@ -467,6 +408,95 @@ def get_live_frames(mission_id: int):
     except Exception as e: return {"status": "error"}
 
 # ==========================================
+# RETRAINING & ANNOTATION ENDPOINTS
+# ==========================================
+@app.post("/api/images/{image_id}/flag")
+def flag_for_retraining(image_id: int):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE captured_images SET requires_retraining = TRUE WHERE id = %s", (image_id,))
+        conn.commit(); cursor.close(); conn.close()
+        return {"status": "success"}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/images/{image_id}/annotate")
+def save_annotation(image_id: int, payload: AnnotationUpdate):
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE captured_images SET yolo_annotation = %s WHERE id = %s", (payload.yolo_annotation, image_id))
+        conn.commit(); cursor.close(); conn.close()
+        return {"status": "success"}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/retraining/dataset")
+def export_yolo_dataset():
+    """Generates a perfect YOLOv8 ZIP file for Google Colab training."""
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        # Fetch images that have been annotated
+        cursor.execute("SELECT id, COALESCE(raw_image_url, image_url), yolo_annotation FROM captured_images WHERE requires_retraining = TRUE AND yolo_annotation != ''")
+        dataset_images = cursor.fetchall()
+        cursor.close(); conn.close()
+
+        if not dataset_images:
+            raise HTTPException(status_code=400, detail="No annotated images available for export.")
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+            
+            # 1. Create the data.yaml configuration file
+            yaml_content = """train: ./images/train
+val: ./images/train
+
+nc: 5
+names:
+  0: Crack
+  1: Flaking
+  2: Chipping
+  3: Exposed Rebar
+  4: Water Infiltration
+"""
+            zip_file.writestr("bridge_dataset/data.yaml", yaml_content)
+
+            # 2. Download and package each image and its .txt file
+            for img_id, url, annotation in dataset_images:
+                try:
+                    response = requests.get(url, timeout=5)
+                    if response.status_code == 200:
+                        # Write the Image file
+                        img_filename = f"bridge_dataset/images/train/img_{img_id}.jpg"
+                        zip_file.writestr(img_filename, response.content)
+                        
+                        # Write the matching YOLO Text file
+                        txt_filename = f"bridge_dataset/labels/train/img_{img_id}.txt"
+                        zip_file.writestr(txt_filename, annotation)
+                except Exception as e:
+                    print(f"Skipped {img_id} during export: {e}")
+
+        zip_buffer.seek(0)
+        return StreamingResponse(
+            zip_buffer, 
+            media_type="application/x-zip-compressed", 
+            headers={"Content-Disposition": "attachment; filename=bridge_dataset.zip"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/retraining/flagged")
+def get_flagged_images():
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, COALESCE(raw_image_url, image_url), yolo_annotation FROM captured_images WHERE requires_retraining = TRUE")
+        flagged = [{"id": r[0], "url": r[1], "annotation": r[2]} for r in cursor.fetchall()]
+        cursor.close(); conn.close()
+        return {"status": "success", "images": flagged}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
 # DATABASE CRUD ENDPOINTS 
 # ==========================================
 @app.get("/api/bridge-data")
@@ -492,7 +522,6 @@ def get_bridge_data():
             cursor.execute("SELECT severity_level, COUNT(*) FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s AND defect_type != 'Raw Image' GROUP BY severity_level", (bridge_id,))
             bridge_defects = cursor.fetchall()
 
-            # PULL CUSTOM ATTRIBUTE FROM DB (Index 11)
             cursor.execute("SELECT captured_images.id, span_target, defect_type, severity_level, captured_at, image_url, captured_images.mission_id, defect_size, confidence_score, latitude, longitude, custom_attribute FROM captured_images JOIN inspection_missions ON captured_images.mission_id = inspection_missions.id WHERE inspection_missions.bridge_id = %s ORDER BY captured_at DESC", (bridge_id,))
             
             image_gallery = [{"id": img[0], "span": img[1], "type": img[2], "severity": img[3], "date": img[4], "url": img[5], "mission_id": img[6], "size": img[7] if img[7] else 'N/A', "confidence": img[8] if img[8] else 'N/A', "lat": img[9], "lon": img[10], "attribute": img[11] if len(img) > 11 and img[11] else ''} for img in cursor.fetchall()]
@@ -503,7 +532,6 @@ def get_bridge_data():
         return {"status": "success", "stats": {"total_bridges": total_bridges, "severity": severity_data}, "bridges": bridge_list}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-# NEW API: Save the custom attribute text
 @app.put("/api/images/{image_id}/attribute")
 def update_image_attribute(image_id: int, payload: AttributeUpdate):
     try:

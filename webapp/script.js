@@ -1,3 +1,5 @@
+const BASE_URL = "https://dronebridgeanalytics.up.railway.app";
+
 let globalChartInstance = null;
 let detailChartInstance = null;
 let missionChartInstance = null; 
@@ -11,6 +13,19 @@ let isDeleteMode = false;
 let selectedForDelete = new Set();
 let currentPreviewImageId = null;
 
+// =========================================
+// ACTIVE LEARNING STATE
+// =========================================
+let flaggedImagesData = [];
+let currentAnnotationImageId = null;
+let isDrawing = false;
+let startX = 0; let startY = 0;
+let currentRect = null; // {x, y, w, h} in canvas coordinates
+const canvas = document.getElementById('annotationCanvas');
+const ctx = canvas ? canvas.getContext('2d') : null;
+let bgImage = new Image();
+bgImage.crossOrigin = "Anonymous"; // Required to draw cloud images
+
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
     const sections = document.querySelectorAll('.content-section');
@@ -23,9 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
             sections.forEach(section => section.style.display = 'none');
             document.getElementById(targetId).style.display = 'block';
             
-            if (targetId === 'bridges') {
-                showBridgeList();
-            }
+            if (targetId === 'bridges') showBridgeList();
+            if (targetId === 'retraining') loadRetrainingHub(); // NEW: Load Hub
             
             navLinks.forEach(l => l.classList.remove('active'));
             this.classList.add('active');
@@ -85,13 +99,220 @@ document.addEventListener('DOMContentLoaded', () => {
             if(confDisplay) confDisplay.innerText = e.target.value + '%';
         });
     }
-    
-    if (sizeSelect) {
-        sizeSelect.value = savedSize;
+    if (sizeSelect) sizeSelect.value = savedSize;
+
+    // Set up canvas mouse events
+    if(canvas) {
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
     }
 
     fetchDatabaseStats();
 });
+
+// =========================================
+// ACTIVE LEARNING FUNCTIONS (NEW)
+// =========================================
+
+window.flagImageForRetraining = async function() {
+    if (!currentPreviewImageId) return;
+    const btn = document.getElementById('flagRetrainBtn');
+    btn.innerText = '⏳ Flagging...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${BASE_URL}/api/images/${currentPreviewImageId}/flag`, { method: 'POST' });
+        if (res.ok) {
+            btn.innerText = '✅ Flagged for Hub';
+            btn.style.background = '#10b981';
+            btn.style.borderColor = '#059669';
+            setTimeout(() => closeImagePreview(), 1500);
+        }
+    } catch(e) {
+        console.error(e);
+        btn.innerText = '❌ Error';
+    }
+};
+
+async function loadRetrainingHub() {
+    try {
+        const res = await fetch(`${BASE_URL}/api/retraining/flagged?t=${new Date().getTime()}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            flaggedImagesData = data.images;
+            renderFlaggedGrid();
+        }
+    } catch(e) { console.error("Failed to load hub", e); }
+}
+
+function renderFlaggedGrid() {
+    const grid = document.getElementById('retrainImageGrid');
+    const msg = document.getElementById('retrainEmptyMsg');
+    grid.innerHTML = '';
+    
+    if (flaggedImagesData.length === 0) {
+        msg.style.display = 'block';
+        return;
+    }
+    
+    msg.style.display = 'none';
+    flaggedImagesData.forEach(img => {
+        const isDone = img.annotation && img.annotation !== '';
+        const badge = isDone ? `<span class="health-badge badge-fair" style="position:absolute; top:5px; right:5px;">✅ Ready</span>` : `<span class="health-badge badge-bad" style="position:absolute; top:5px; right:5px;">🚨 Needs Box</span>`;
+        
+        const card = document.createElement('div');
+        card.style.position = 'relative';
+        card.style.cursor = 'pointer';
+        card.style.border = currentAnnotationImageId === img.id ? '3px solid #8b5cf6' : '1px solid #e2e8f0';
+        card.style.borderRadius = '6px';
+        card.style.overflow = 'hidden';
+        card.onclick = () => loadCanvasImage(img);
+        
+        card.innerHTML = `
+            ${badge}
+            <img src="${img.url}" style="width: 100%; height: 120px; object-fit: cover; display: block;">
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function loadCanvasImage(imgData) {
+    currentAnnotationImageId = imgData.id;
+    currentRect = null;
+    document.getElementById('canvasPlaceholder').style.display = 'none';
+    
+    const badge = document.getElementById('annotationStatus');
+    badge.innerText = imgData.annotation ? "✅ Annotated" : "🚨 Draw Box";
+    badge.className = imgData.annotation ? "health-badge badge-fair" : "health-badge badge-bad";
+    
+    renderFlaggedGrid(); // Refresh border highlight
+
+    bgImage.onload = () => {
+        canvas.style.display = 'block';
+        // Match canvas logical size to image actual size
+        canvas.width = bgImage.width;
+        canvas.height = bgImage.height;
+        ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+        
+        // If they already drew a box, parse it and render it
+        if(imgData.annotation) {
+            const parts = imgData.annotation.split(' ');
+            if (parts.length === 5) {
+                document.getElementById('annotationClassSelect').value = parts[0];
+                const cx = parseFloat(parts[1]) * canvas.width;
+                const cy = parseFloat(parts[2]) * canvas.height;
+                const w = parseFloat(parts[3]) * canvas.width;
+                const h = parseFloat(parts[4]) * canvas.height;
+                currentRect = { x: cx - w/2, y: cy - h/2, w: w, h: h };
+                draw(); // redraws with the box
+            }
+        }
+    };
+    bgImage.src = imgData.url;
+}
+
+function startDrawing(e) {
+    if (!currentAnnotationImageId) return;
+    const rect = canvas.getBoundingClientRect();
+    // Scale mouse coordinates to match canvas internal resolution
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    startX = (e.clientX - rect.left) * scaleX;
+    startY = (e.clientY - rect.top) * scaleY;
+    isDrawing = true;
+    currentRect = null; // Clear previous
+}
+
+function draw(e) {
+    if (!currentAnnotationImageId) return;
+    
+    // Always clear and redraw base image
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+    
+    if (isDrawing && e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const currentX = (e.clientX - rect.left) * scaleX;
+        const currentY = (e.clientY - rect.top) * scaleY;
+        
+        currentRect = {
+            x: Math.min(startX, currentX),
+            y: Math.min(startY, currentY),
+            w: Math.abs(currentX - startX),
+            h: Math.abs(currentY - startY)
+        };
+    }
+    
+    if (currentRect) {
+        ctx.strokeStyle = '#ef4444'; // Red bounding box
+        ctx.lineWidth = 4;
+        ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; // Translucent fill
+        ctx.fillRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+    }
+}
+
+function stopDrawing() {
+    isDrawing = false;
+}
+
+window.clearAnnotationCanvas = function() {
+    currentRect = null;
+    draw(); 
+};
+
+window.saveAnnotation = async function() {
+    if (!currentAnnotationImageId) return alert("Select an image first.");
+    if (!currentRect) return alert("Draw a bounding box around the defect first.");
+
+    // Calculate YOLO Normalized Coordinates
+    const x_center = (currentRect.x + currentRect.w / 2) / canvas.width;
+    const y_center = (currentRect.y + currentRect.h / 2) / canvas.height;
+    const width = currentRect.w / canvas.width;
+    const height = currentRect.h / canvas.height;
+    
+    const class_id = document.getElementById('annotationClassSelect').value;
+    
+    // Format: "class_id x_center y_center width height"
+    const yoloString = `${class_id} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
+
+    try {
+        const res = await fetch(`${BASE_URL}/api/images/${currentAnnotationImageId}/annotate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yolo_annotation: yoloString })
+        });
+        if (res.ok) {
+            document.getElementById('annotationStatus').innerText = "✅ Saved!";
+            document.getElementById('annotationStatus').className = "health-badge badge-fair";
+            // Update local memory so the grid updates
+            const img = flaggedImagesData.find(i => i.id === currentAnnotationImageId);
+            if (img) img.annotation = yoloString;
+            renderFlaggedGrid();
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Failed to save annotation.");
+    }
+};
+
+window.exportYoloDataset = function() {
+    // Check if there's actually anything ready
+    const readyCount = flaggedImagesData.filter(i => i.annotation && i.annotation !== '').length;
+    if (readyCount === 0) return alert("You need to draw boxes and save at least one image before exporting!");
+    
+    // Browser automatically downloads the ZIP stream
+    window.location.href = `${BASE_URL}/api/retraining/dataset`;
+};
+
+// =========================================
+// EXISTING GCS FUNCTIONS BELOW
+// =========================================
 
 window.openBridgeView = function(db_id) {
     const bridge = liveBridgeData.find(b => b.db_id === db_id);
@@ -108,7 +329,7 @@ window.deleteBridge = async function(db_id) {
     if (!confirm("⚠️ WARNING: Are you sure you want to permanently delete this bridge and all of its associated flight missions and images? This action cannot be undone.")) return;
 
     try {
-        const res = await fetch(`/api/bridges/${db_id}`, { method: 'DELETE' });
+        const res = await fetch(`${BASE_URL}/api/bridges/${db_id}`, { method: 'DELETE' });
         const data = await res.json();
         
         if (data.status === 'success') {
@@ -119,26 +340,6 @@ window.deleteBridge = async function(db_id) {
     } catch (error) { 
         console.error("Network Error:", error); 
         alert("Error securely connecting to backend for deletion.");
-    }
-};
-
-window.saveAiSettings = function() {
-    const confSlider = document.getElementById('aiConfSlider');
-    const sizeSelect = document.getElementById('aiImgSizeSelect');
-    
-    if(confSlider && sizeSelect) {
-        localStorage.setItem('aiConfThreshold', confSlider.value);
-        localStorage.setItem('aiImgSize', sizeSelect.value);
-        
-        const btn = document.getElementById('saveSettingsBtn');
-        if(btn) {
-            btn.innerText = "✅ Configuration Saved!";
-            btn.style.background = "#059669";
-            setTimeout(() => {
-                btn.innerText = "💾 Save Configuration";
-                btn.style.background = "#10b981";
-            }, 2000);
-        }
     }
 };
 
@@ -198,7 +399,7 @@ window.confirmBulkDelete = async function() {
     }
 
     try {
-        const res = await fetch('/api/images/bulk-delete', {
+        const res = await fetch(`${BASE_URL}/api/images/bulk-delete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image_ids: Array.from(selectedForDelete) })
@@ -229,7 +430,7 @@ window.forceResetMission = async function() {
     if(btn) btn.innerText = "RESETTING...";
     
     try {
-        const res = await fetch(`/api/mission/${currentActiveMission}/force-reset`, { method: 'POST' });
+        const res = await fetch(`${BASE_URL}/api/mission/${currentActiveMission}/force-reset`, { method: 'POST' });
         if (res.ok) {
             alert("✅ Mission successfully reset! You can now run the analysis again.");
             fetchDatabaseStats(); 
@@ -261,7 +462,7 @@ window.saveImageAttribute = async function() {
     btn.disabled = true;
 
     try {
-        const res = await fetch(`/api/images/${currentPreviewImageId}/attribute`, {
+        const res = await fetch(`${BASE_URL}/api/images/${currentPreviewImageId}/attribute`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ custom_attribute: inputVal })
@@ -320,13 +521,20 @@ function openImagePreview(imgId) {
     const attrText = document.getElementById('previewAttributeText');
     const attrContainer = document.getElementById('attributeInputContainer');
     
-    // NEW: Bridge Structure DOM Elements
     const pBridgeName = document.getElementById('previewBridgeName');
     const pBridgeCode = document.getElementById('previewBridgeCode');
     
+    // Reset flag button text
+    const flagBtn = document.getElementById('flagRetrainBtn');
+    if (flagBtn) {
+        flagBtn.innerText = '🚩 AI Missed Something (Flag)';
+        flagBtn.style.background = '#8b5cf6';
+        flagBtn.style.borderColor = '#7c3aed';
+        flagBtn.disabled = false;
+    }
+    
     const modal = document.getElementById('imagePreviewModal');
 
-    // Set Bridge Name and Code
     if(pBridgeName) pBridgeName.innerText = data.bridgeName;
     if(pBridgeCode) pBridgeCode.innerText = data.bridgeCode;
 
@@ -358,7 +566,7 @@ function openImagePreview(imgId) {
     if (data.lat && data.lon && data.lat !== 0.0 && data.lon !== 0.0) {
         if(pGpsLink) {
             pGpsLink.style.display = 'inline';
-            pGpsLink.href = `https://www.google.com/maps?q=${data.lat},${data.lon}`;
+            pGpsLink.href = `http://googleusercontent.com/maps.google.com/maps?q=${data.lat},${data.lon}`;
         }
         if(pGpsText) pGpsText.innerText = `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}`;
     } else {
@@ -386,12 +594,13 @@ window.openLivePreview = function(url) {
     const attrContainer = document.getElementById('attributeInputContainer');
     const attrBtn = document.getElementById('addAttrBtn');
     
-    // NEW: Bridge Structure DOM Elements
     const pBridgeName = document.getElementById('previewBridgeName');
     const pBridgeCode = document.getElementById('previewBridgeCode');
     const bridgeSelect = document.getElementById('flightBridgeSelect');
+    const flagBtn = document.getElementById('flagRetrainBtn');
     
-    // Attempt to grab live bridge data for Live mode
+    if (flagBtn) flagBtn.style.display = 'none'; // Cant flag raw un-analyzed frames
+    
     let liveBName = 'Active Flight Zone';
     let liveBCode = '';
     if (bridgeSelect && bridgeSelect.value) {
@@ -432,17 +641,19 @@ window.closeImagePreview = function(event) {
     const modal = document.getElementById('imagePreviewModal');
     const pImg = document.getElementById('previewImageSrc');
     const attrBtn = document.getElementById('addAttrBtn');
+    const flagBtn = document.getElementById('flagRetrainBtn');
     
     if(modal) modal.style.display = 'none';
     if(pImg) pImg.src = '';
     if(attrBtn) attrBtn.style.display = 'inline-block'; 
+    if(flagBtn) flagBtn.style.display = 'block';
     
     currentPreviewImageId = null;
 };
 
 async function fetchDatabaseStats() {
     try {
-        const response = await fetch(`/api/bridge-data?t=${new Date().getTime()}`);
+        const response = await fetch(`${BASE_URL}/api/bridge-data?t=${new Date().getTime()}`);
         const data = await response.json();
 
         if (data.status === "success") {
@@ -760,7 +971,7 @@ function showMissionDetails(missionId) {
         if(aiTitle) aiTitle.innerText = "Re-Run AI Analysis";
         if(aiDesc) aiDesc.innerHTML = "Want to scan with different confidence or resolution? Update your <b>Settings</b> and re-scan this flight.";
         if(aiBtn) {
-            aiBtn.innerHTML = "RE-SCAN MISSION";
+            aiBtn.innerHTML = "🔄 RE-SCAN MISSION";
             aiBtn.style.background = "#3b82f6"; 
             aiBtn.disabled = false; 
         }
@@ -848,7 +1059,7 @@ window.startAiAnalysis = async function() {
     if(progressBar) progressBar.style.width = '0%';
 
     try {
-        await fetch('/api/mission/analyze', {
+        await fetch(`${BASE_URL}/api/mission/analyze`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -859,7 +1070,7 @@ window.startAiAnalysis = async function() {
         });
         
         const pollInterval = setInterval(async () => {
-            const statusRes = await fetch(`/api/mission/${currentActiveMission}/status?t=${new Date().getTime()}`);
+            const statusRes = await fetch(`${BASE_URL}/api/mission/${currentActiveMission}/status?t=${new Date().getTime()}`);
             const statusData = await statusRes.json();
             
             if (statusData.status === 'Processing') {
@@ -959,7 +1170,6 @@ function buildGalleryGrid(imageArray, container) {
 
     const sortedSpans = Object.keys(groupedBySpan).sort((a, b) => parseInt(a.replace(/[^\d]/g, '')) - parseInt(b.replace(/[^\d]/g, '')));
 
-    // EXTRACT BRIDGE NAME & CODE GLOBALLY
     const bName = currentActiveBridge ? currentActiveBridge.name : 'Unknown Structure';
     const bCode = currentActiveBridge ? currentActiveBridge.id : 'Unknown Code';
 
@@ -1034,8 +1244,8 @@ function buildGalleryGrid(imageArray, container) {
                 lat: img.lat || 0.0,
                 lon: img.lon || 0.0,
                 attribute: img.attribute || '',
-                bridgeName: bName, // ADDED
-                bridgeCode: bCode  // ADDED
+                bridgeName: bName, 
+                bridgeCode: bCode  
             };
 
             const card = document.createElement('div');
@@ -1047,7 +1257,6 @@ function buildGalleryGrid(imageArray, container) {
                 handleGalleryClick(e, img.id);
             };
 
-            // ADDED BRIDGE NAME & CODE TO THE SMALL GALLERY CARD HTML
             card.innerHTML = `
                 <div style="position: relative;">
                     ${topBadge}
@@ -1111,7 +1320,7 @@ window.saveBridge = async function() {
     if(!payload.bridge_code || !payload.name) return alert("Bridge Code and Name are required!");
 
     const method = db_id ? 'PUT' : 'POST';
-    const url = db_id ? `/api/bridges/${db_id}` : '/api/bridges';
+    const url = db_id ? `${BASE_URL}/api/bridges/${db_id}` : `${BASE_URL}/api/bridges`;
 
     try {
         const res = await fetch(url, {
@@ -1134,7 +1343,7 @@ window.saveBridgeRemarks = async function() {
     if(btn) btn.innerText = "Saving...";
     
     try {
-        const response = await fetch(`/api/bridges/${currentActiveBridge.db_id}/remarks`, {
+        const response = await fetch(`${BASE_URL}/api/bridges/${currentActiveBridge.db_id}/remarks`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ remarks: newRemarks })
@@ -1175,7 +1384,7 @@ window.retryStream = function() {
     if(offlineOverlay) offlineOverlay.style.display = 'none'; 
     if(streamImg) {
         streamImg.style.display = 'block';
-        streamImg.src = "/video_feed?t=" + new Date().getTime();
+        streamImg.src = `${BASE_URL}/video_feed?t=` + new Date().getTime();
     }
 };
 
@@ -1208,7 +1417,7 @@ window.setFlightSpan = async function(span, btnElement) {
     
     if(isFlightActive) {
         try {
-            const res = await fetch('/api/mission/span', {
+            const res = await fetch(`${BASE_URL}/api/mission/span`, {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ span_target: span })
             });
             if(res.ok) logToTerminal(`> Flight Zone dynamically shifted to: ${span}`, '#22C55E');
@@ -1224,13 +1433,13 @@ async function fetchLiveCaptures() {
         const gallery = document.getElementById('liveCaptureGallery');
         
         if (isFlightActive && gallery) {
-            const res = await fetch(`/api/mission/${currentActiveMission}/live_frames?t=${new Date().getTime()}`);
+            const res = await fetch(`${BASE_URL}/api/mission/${currentActiveMission}/live_frames?t=${new Date().getTime()}`);
             const data = await res.json();
             if (data.status === 'success' && data.frames.length > 0) {
                 gallery.innerHTML = data.frames.map(f => `
-                    <div class="live-capture-card" onclick="openLivePreview('${f.url}')">
+                    <div class="live-capture-card" onclick="openLivePreview('${BASE_URL}${f.url}')">
                         <span class="health-badge badge-fair" style="position: absolute; top: 5px; right: 5px;">Raw Frame</span>
-                        <img src="${f.url}" alt="Raw Capture">
+                        <img src="${BASE_URL}${f.url}" alt="Raw Capture">
                         <div class="live-capture-info">Captured</div>
                     </div>
                 `).join('');
@@ -1251,7 +1460,7 @@ window.triggerManualCapture = async function() {
     btn.style.borderColor = "#b45309";
     
     try {
-        const res = await fetch('/api/mission/capture', { method: 'POST' });
+        const res = await fetch(`${BASE_URL}/api/mission/capture`, { method: 'POST' });
         if(res.ok) {
             logToTerminal(`> 📸 Manual Capture signal transmitted to Drone.`, '#FACC15');
             setTimeout(() => {
@@ -1288,7 +1497,7 @@ window.toggleFlightMission = async function() {
         if(!spanInput.value) return alert("Please select a target span.");
 
         try {
-            const res = await fetch('/api/mission/start', {
+            const res = await fetch(`${BASE_URL}/api/mission/start`, {
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({ 
@@ -1347,11 +1556,11 @@ window.toggleFlightMission = async function() {
         logToTerminal(`> Mission stopped. Saving raw data securely to Cloudinary Database...`, '#F59E0B');
         
         try {
-            await fetch('/api/mission/stop', { method: 'POST' });
+            await fetch(`${BASE_URL}/api/mission/stop`, { method: 'POST' });
             isFlightActive = false;
             
             const pollInterval = setInterval(async () => {
-                const statusRes = await fetch(`/api/mission/${currentActiveMission}/status?t=${new Date().getTime()}`);
+                const statusRes = await fetch(`${BASE_URL}/api/mission/${currentActiveMission}/status?t=${new Date().getTime()}`);
                 const statusData = await statusRes.json();
                 
                 if (statusData.status === 'Saving to Cloud') {
