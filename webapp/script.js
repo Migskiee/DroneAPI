@@ -1401,6 +1401,33 @@ window.saveBridgeRemarks = async function() {
     }
 };
 
+ // =========================================
+// SETTINGS FUNCTIONS
+// =========================================
+window.saveAiSettings = function() {
+    const confVal = document.getElementById('aiConfSlider').value;
+    const sizeVal = document.getElementById('aiImgSizeSelect').value;
+
+    // Save values to browser storage
+    localStorage.setItem('aiConfThreshold', confVal);
+    localStorage.setItem('aiImgSize', sizeVal);
+
+    // Visual feedback for the user
+    const btn = document.getElementById('saveSettingsBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = "✅ Configuration Saved!";
+    btn.style.background = "#059669"; // Darker green
+    btn.disabled = true;
+
+    // Reset button after 2 seconds
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.background = "#10b981"; // Original green
+        btn.disabled = false;
+    }, 2000);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     const streamImg = document.getElementById('liveVideoStream');
     const offlineOverlay = document.getElementById('offlineOverlay');

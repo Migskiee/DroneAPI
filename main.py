@@ -11,15 +11,16 @@ import uvicorn
 import io
 import zipfile
 import glob
-import re # <--- NEW
+import re
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File # <--- NEW
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, Response, FileResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
 from fastapi.middleware.cors import CORSMiddleware
+
 # ==========================================
 # CONFIGURATION
 # ==========================================
@@ -45,11 +46,8 @@ try:
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS custom_attribute TEXT DEFAULT '';")
-    
-    # Active Learning Columns
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS requires_retraining BOOLEAN DEFAULT FALSE;")
     cursor.execute("ALTER TABLE captured_images ADD COLUMN IF NOT EXISTS yolo_annotation TEXT DEFAULT '';")
-    
     cursor.execute("UPDATE captured_images SET raw_image_url = image_url WHERE raw_image_url IS NULL AND defect_type = 'Raw Image';")
     conn.commit()
     cursor.close()
@@ -86,22 +84,49 @@ class AnalyzeParams(BaseModel):
     img_size: int = 640
 
 # ==========================================
+# STRICT REGEX MODEL FINDER (FIXED)
+# ==========================================
+def get_latest_custom_model():
+    """Scans the AIModel folder and strictly finds the highest V# model, ignoring default YOLO files."""
+    os.makedirs('AIModel', exist_ok=True)
+    models = glob.glob('AIModel/*.pt')
+    if not models:
+        return None
+    
+    highest_v = -1
+    best_model = None
+    
+    for m in models:
+        filename = os.path.basename(m)
+        match = re.search(r'V(\d+)\.pt$', filename, re.IGNORECASE)
+        if match:
+            v = int(match.group(1))
+            if v > highest_v:
+                highest_v = v
+                best_model = m
+                
+    # Fallback: If no "V" files are found, pick the first one that isn't named "yolo"
+    if not best_model:
+        custom_models = [m for m in models if 'yolo' not in os.path.basename(m).lower()]
+        best_model = custom_models[0] if custom_models else models[0]
+            
+    return best_model
+
+# ==========================================
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
 active_model_name = "Unknown"
 
 try:
-    available_models = glob.glob('AIModel/*.pt')
-    if available_models:
-        available_models.sort(reverse=True)
-        latest_model = available_models[0]
+    latest_model = get_latest_custom_model()
+    if latest_model:
         active_model_name = os.path.basename(latest_model)
-        print(f"🔄 Auto-detecting AI... Loading newest weights: {latest_model}")
+        print(f"🔄 Auto-detecting AI... Loading exact weights: {active_model_name}")
         model = YOLO(latest_model)
         print("✅ YOLO Model Loaded Successfully!")
     else:
-        active_model_name = "AIModelFinalV4.pt"
-        model = YOLO(f'AIModel/{active_model_name}')
+        print("⚠️ No custom models found in AIModel directory!")
+        model = None
 except Exception as e:
     print(f"⚠️ Warning: YOLO Model failed to load. {e}")
     model = None
@@ -444,13 +469,7 @@ def push_dataset_to_cloud():
         zip_path = os.path.join(TEMP_DIR, zip_filename)
         
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            
-            yaml_content = """train: ./images/train
-val: ./images/train
-
-nc: 5
-names: ['Chipping', 'Crack', 'Exposed Rebar', 'Flaking', 'Water Infiltration']
-"""
+            yaml_content = """train: ./images/train\nval: ./images/train\nnc: 5\nnames: ['Chipping', 'Crack', 'Exposed Rebar', 'Flaking', 'Water Infiltration']\n"""
             zip_file.writestr("bridge_dataset/data.yaml", yaml_content)
 
             for img_id, url, annotation in dataset_images:
@@ -463,15 +482,9 @@ names: ['Chipping', 'Crack', 'Exposed Rebar', 'Flaking', 'Water Infiltration']
                     print(f"Skipped {img_id}: {e}")
 
         secure_url = f"https://dronebridgeanalytics.up.railway.app/temp_frames/{zip_filename}"
-        
-        with state_lock: 
-            flight_state["latest_dataset_url"] = secure_url
-            
-        print(f"✅ Dataset safely hosted on Railway: {secure_url}")
+        with state_lock: flight_state["latest_dataset_url"] = secure_url
         return {"status": "success", "url": secure_url}
-
     except Exception as e:
-        print(f"❌ Failed to pack dataset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/retraining/latest-dataset")
@@ -492,18 +505,15 @@ def get_flagged_images():
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# COLAB MODEL DOWNLOAD ENDPOINT
+# COLAB MODEL DOWNLOAD / UPLOAD ENDPOINTS
 # ==========================================
 @app.get("/api/model/download-latest")
 def download_latest_model():
-    """Serves the most recent .pt model file directly to Google Colab."""
+    """Serves the explicitly highest custom .pt model directly to Colab."""
     try:
-        available_models = glob.glob('AIModel/*.pt')
-        if not available_models:
-            raise HTTPException(status_code=404, detail="No YOLO model found in AIModel folder.")
-            
-        available_models.sort(reverse=True)
-        latest = available_models[0]
+        latest = get_latest_custom_model()
+        if not latest:
+            raise HTTPException(status_code=404, detail="No custom YOLO model found in AIModel folder.")
         print(f"☁️ Colab requested current brain. Serving {latest}...")
         return FileResponse(latest, filename=os.path.basename(latest))
     except Exception as e:
@@ -519,44 +529,36 @@ async def upload_new_model(file: UploadFile = File(...)):
     """Receives the retrained model from Colab, versions it, and hot-swaps the brain."""
     global model, active_model_name
     try:
-        # 1. Figure out the highest current version number
         os.makedirs('AIModel', exist_ok=True)
         available_models = glob.glob('AIModel/*.pt')
         
-        highest_version = 4 # Default fallback if no numbers are found
+        highest_version = 4
         for m in available_models:
-            # Looks for "V4.pt", "V5.pt", etc., and extracts the number
-            match = re.search(r'V(\d+)\.pt$', m)
+            match = re.search(r'V(\d+)\.pt$', os.path.basename(m), re.IGNORECASE)
             if match:
                 v = int(match.group(1))
                 if v > highest_version:
                     highest_version = v
                     
-        # 2. Increment the version number
         new_version = highest_version + 1
         new_filename = f"AIModelFinalV{new_version}.pt"
         save_path = os.path.join('AIModel', new_filename)
         
-        # 3. Save the new file from Colab
         with open(save_path, "wb") as buffer:
             buffer.write(await file.read())
             
-        # 4. Hot-Swap the Active Model in Memory
         print(f"🔄 COLAB UPLOAD RECEIVED! Hot-swapping to: {new_filename}")
         model = YOLO(save_path)
         active_model_name = new_filename
         
-        # 5. Clear the flagged images from the database so they aren't trained on again
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
         cursor.execute("UPDATE captured_images SET requires_retraining = FALSE, yolo_annotation = '' WHERE requires_retraining = TRUE")
         conn.commit()
         cursor.close()
         conn.close()
-        print("🧹 Cleared retraining queue for the next flight.")
         
         return {"status": "success", "new_version": new_filename}
-        
     except Exception as e:
         print(f"❌ Auto-Upload Failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
