@@ -35,6 +35,10 @@ RAILWAY_DB_URL = "postgresql://postgres:huXFgxfRwaSChMeTWJdNjZiCnZUkxIve@interch
 TEMP_DIR = "temp_mission_frames"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+# NEW: The Persistent "Digital USB Drive" Folder
+PERSISTENT_DIR = "PersistentModels"
+os.makedirs(PERSISTENT_DIR, exist_ok=True)
+
 try:
     conn = psycopg2.connect(RAILWAY_DB_URL)
     cursor = conn.cursor()
@@ -72,6 +76,7 @@ class BridgeCreateUpdate(BaseModel): bridge_code: str; name: str; location: str;
 class BulkDeleteParams(BaseModel): image_ids: list[int]
 class AttributeUpdate(BaseModel): custom_attribute: str
 class AnnotationUpdate(BaseModel): yolo_annotation: str
+class ModelUpdateParams(BaseModel): model_name: str 
 
 class MissionStartParams(BaseModel): 
     bridge_id: int
@@ -84,19 +89,23 @@ class AnalyzeParams(BaseModel):
     img_size: int = 640
 
 # ==========================================
-# STRICT REGEX MODEL FINDER (FIXED)
+# STRICT REGEX MODEL FINDER (UPDATED FOR PERSISTENCE)
 # ==========================================
 def get_latest_custom_model():
-    """Scans the AIModel folder and strictly finds the highest V# model, ignoring default YOLO files."""
+    """Scans BOTH the persistent volume and the repo folder for the highest V# model."""
     os.makedirs('AIModel', exist_ok=True)
-    models = glob.glob('AIModel/*.pt')
-    if not models:
+    os.makedirs(PERSISTENT_DIR, exist_ok=True)
+    
+    # Combine models from both folders
+    all_models = glob.glob(f'{PERSISTENT_DIR}/*.pt') + glob.glob('AIModel/*.pt')
+    
+    if not all_models:
         return None
     
     highest_v = -1
     best_model = None
     
-    for m in models:
+    for m in all_models:
         filename = os.path.basename(m)
         match = re.search(r'V(\d+)\.pt$', filename, re.IGNORECASE)
         if match:
@@ -105,10 +114,9 @@ def get_latest_custom_model():
                 highest_v = v
                 best_model = m
                 
-    # Fallback: If no "V" files are found, pick the first one that isn't named "yolo"
     if not best_model:
-        custom_models = [m for m in models if 'yolo' not in os.path.basename(m).lower()]
-        best_model = custom_models[0] if custom_models else models[0]
+        custom_models = [m for m in all_models if 'yolo' not in os.path.basename(m).lower()]
+        best_model = custom_models[0] if custom_models else all_models[0]
             
     return best_model
 
@@ -526,14 +534,16 @@ def get_current_model_version():
 
 @app.post("/api/model/upload")
 async def upload_new_model(file: UploadFile = File(...)):
-    """Receives the retrained model from Colab, versions it, and hot-swaps the brain."""
+    """Receives the retrained model from Colab and saves it to PERSISTENT storage."""
     global model, active_model_name
     try:
         os.makedirs('AIModel', exist_ok=True)
-        available_models = glob.glob('AIModel/*.pt')
+        os.makedirs(PERSISTENT_DIR, exist_ok=True)
+        
+        all_models = glob.glob(f'{PERSISTENT_DIR}/*.pt') + glob.glob('AIModel/*.pt')
         
         highest_version = 4
-        for m in available_models:
+        for m in all_models:
             match = re.search(r'V(\d+)\.pt$', os.path.basename(m), re.IGNORECASE)
             if match:
                 v = int(match.group(1))
@@ -542,12 +552,14 @@ async def upload_new_model(file: UploadFile = File(...)):
                     
         new_version = highest_version + 1
         new_filename = f"AIModelFinalV{new_version}.pt"
-        save_path = os.path.join('AIModel', new_filename)
+        
+        # FIXED: Save to the Persistent Folder so it survives Railway redeploys
+        save_path = os.path.join(PERSISTENT_DIR, new_filename)
         
         with open(save_path, "wb") as buffer:
             buffer.write(await file.read())
             
-        print(f"🔄 COLAB UPLOAD RECEIVED! Hot-swapping to: {new_filename}")
+        print(f"🔄 COLAB UPLOAD RECEIVED! Saved to Persistent Storage: {new_filename}")
         model = YOLO(save_path)
         active_model_name = new_filename
         
@@ -562,6 +574,48 @@ async def upload_new_model(file: UploadFile = File(...)):
     except Exception as e:
         print(f"❌ Auto-Upload Failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# VERSION CONTROL ENDPOINTS 
+# ==========================================
+@app.get("/api/model/list")
+def list_available_models():
+    try:
+        all_models = glob.glob(f'{PERSISTENT_DIR}/*.pt') + glob.glob('AIModel/*.pt')
+        # Deduplicate names in case the same file exists in both folders
+        model_names = list(set([os.path.basename(m) for m in all_models]))
+        
+        def extract_version(name):
+            match = re.search(r'V(\d+)\.pt$', name, re.IGNORECASE)
+            return int(match.group(1)) if match else 0
+            
+        model_names.sort(key=extract_version, reverse=True)
+        
+        return {"status": "success", "models": model_names, "active": active_model_name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/model/set-active")
+def set_active_model(params: ModelUpdateParams):
+    global model, active_model_name
+    try:
+        model_path_persistent = os.path.join(PERSISTENT_DIR, params.model_name)
+        model_path_repo = os.path.join('AIModel', params.model_name)
+        
+        if os.path.exists(model_path_persistent):
+            target_path = model_path_persistent
+        elif os.path.exists(model_path_repo):
+            target_path = model_path_repo
+        else:
+            raise HTTPException(status_code=404, detail="Model not found")
+        
+        print(f"🔄 Manual Hot-swap triggered by UI: {params.model_name}")
+        model = YOLO(target_path)
+        active_model_name = params.model_name
+        return {"status": "success", "active_model": active_model_name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==========================================
 # DATABASE CRUD ENDPOINTS 

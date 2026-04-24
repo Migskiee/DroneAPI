@@ -353,8 +353,7 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <div style="display: flex; align-items: center; gap: 15px;">
-                                <select id="annotationClassSelect" class="form-control"
-                                    style="width: 250px; font-weight: bold; background: #f8fafc;">
+                                <select id="annotationClassSelect" class="form-control" style="width: 250px; font-weight: bold; background: #f8fafc;">
                                     <option value="0">Chipping</option>
                                     <option value="1">Crack</option>
                                     <option value="2">Exposed Rebar</option>
@@ -397,12 +396,15 @@
 
                     <div style="margin-bottom: 25px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <strong style="color: #334155; font-size: 15px;">Active AI Version</strong>
-                            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">The neural network weights currently loaded in production.</p>
+                            <strong style="color: #334155; font-size: 15px;">Active AI Version Control</strong>
+                            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Select which neural network weights to load into production.</p>
                         </div>
-                        <span id="activeAiVersionBadge" class="badge badge-online" style="background: #eef2ff; color: #4f46e5; font-size: 14px; padding: 8px 16px; border: 1px solid #c7d2fe;">
-                            Loading...
-                        </span>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="aiVersionSelect" class="form-control" style="margin: 0; width: auto; min-width: 220px; font-weight: bold; color: #4f46e5; border-color: #c7d2fe; background-color: #eef2ff;">
+                                <option value="">Loading...</option>
+                            </select>
+                            <button id="applyAiVersionBtn" class="btn btn-primary" style="margin: 0; padding: 10px 20px; font-size: 14px; background: #4f46e5; border-color: #4338ca;" onclick="applyAiVersion()">🔄 Load</button>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 30px;">

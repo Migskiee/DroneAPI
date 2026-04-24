@@ -109,31 +109,76 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     fetchDatabaseStats();
-    fetchActiveAiVersion(); // NEW: Load active AI version on start
+    fetchAvailableModels(); // Load models into the dropdown
 });
 
-async function fetchActiveAiVersion() {
+async function fetchAvailableModels() {
     try {
-        const res = await fetch(`${BASE_URL}/api/model/current-version`);
+        const res = await fetch(`${BASE_URL}/api/model/list`);
         const data = await res.json();
         
         if (data.status === 'success') {
-            const badge = document.getElementById('activeAiVersionBadge');
-            if (badge) {
-                badge.innerText = data.version;
+            const select = document.getElementById('aiVersionSelect');
+            if (select) {
+                select.innerHTML = '';
+                data.models.forEach(modelName => {
+                    const option = document.createElement('option');
+                    option.value = modelName;
+                    if (modelName === data.active) {
+                        option.selected = true;
+                        option.innerText = `🟢 ${modelName} (Active)`;
+                    } else {
+                        option.innerText = modelName;
+                    }
+                    select.appendChild(option);
+                });
             }
         }
     } catch(e) {
-        console.error("Error fetching model version", e);
-        const badge = document.getElementById('activeAiVersionBadge');
-        if (badge) {
-            badge.innerText = "Connection Error";
-            badge.style.background = "#fee2e2";
-            badge.style.color = "#b91c1c";
-            badge.style.borderColor = "#fca5a5";
-        }
+        console.error("Error fetching models", e);
     }
 }
+
+window.applyAiVersion = async function() {
+    const select = document.getElementById('aiVersionSelect');
+    const btn = document.getElementById('applyAiVersionBtn');
+    
+    if (!select || !select.value) return;
+
+    const selectedModel = select.value;
+    const originalText = btn.innerHTML;
+
+    btn.innerHTML = "⏳ Hot-Swapping...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${BASE_URL}/api/model/set-active`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_name: selectedModel })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+            btn.innerHTML = "✅ Brain Swapped!";
+            btn.style.background = "#10b981";
+            fetchAvailableModels(); // Refresh to move the 🟢 dot
+        } else {
+            alert("Failed to load model.");
+            btn.innerHTML = originalText;
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Network error.");
+        btn.innerHTML = originalText;
+    } finally {
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = "🔄 Load";
+            btn.style.background = "#4f46e5";
+        }, 2000);
+    }
+};
 
 // =========================================
 // ACTIVE LEARNING FUNCTIONS
@@ -350,6 +395,30 @@ window.exportYoloDataset = async function() {
             btn.style.background = "#8b5cf6";
         }, 3000);
     }
+};
+
+// =========================================
+// SETTINGS FUNCTIONS
+// =========================================
+window.saveAiSettings = function() {
+    const confVal = document.getElementById('aiConfSlider').value;
+    const sizeVal = document.getElementById('aiImgSizeSelect').value;
+
+    localStorage.setItem('aiConfThreshold', confVal);
+    localStorage.setItem('aiImgSize', sizeVal);
+
+    const btn = document.getElementById('saveSettingsBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = "✅ Configuration Saved!";
+    btn.style.background = "#059669"; 
+    btn.disabled = true;
+
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.background = "#10b981"; 
+        btn.disabled = false;
+    }, 2000);
 };
 
 // =========================================
@@ -1399,33 +1468,6 @@ window.saveBridgeRemarks = async function() {
         console.error("Save failed", e);
         if(btn) btn.innerText = "💾 Save Remarks";
     }
-};
-
- // =========================================
-// SETTINGS FUNCTIONS
-// =========================================
-window.saveAiSettings = function() {
-    const confVal = document.getElementById('aiConfSlider').value;
-    const sizeVal = document.getElementById('aiImgSizeSelect').value;
-
-    // Save values to browser storage
-    localStorage.setItem('aiConfThreshold', confVal);
-    localStorage.setItem('aiImgSize', sizeVal);
-
-    // Visual feedback for the user
-    const btn = document.getElementById('saveSettingsBtn');
-    const originalText = btn.innerHTML;
-    
-    btn.innerHTML = "✅ Configuration Saved!";
-    btn.style.background = "#059669"; // Darker green
-    btn.disabled = true;
-
-    // Reset button after 2 seconds
-    setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.style.background = "#10b981"; // Original green
-        btn.disabled = false;
-    }, 2000);
 };
 
 document.addEventListener('DOMContentLoaded', () => {
