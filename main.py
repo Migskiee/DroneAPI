@@ -11,15 +11,15 @@ import uvicorn
 import io
 import zipfile
 import glob
+import re # <--- NEW
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File # <--- NEW
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, Response, FileResponse
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel 
 from ultralytics import YOLO
 from fastapi.middleware.cors import CORSMiddleware
-
 # ==========================================
 # CONFIGURATION
 # ==========================================
@@ -513,6 +513,53 @@ def download_latest_model():
 def get_current_model_version():
     """Returns the filename of the currently loaded YOLO model."""
     return {"status": "success", "version": active_model_name}
+
+@app.post("/api/model/upload")
+async def upload_new_model(file: UploadFile = File(...)):
+    """Receives the retrained model from Colab, versions it, and hot-swaps the brain."""
+    global model, active_model_name
+    try:
+        # 1. Figure out the highest current version number
+        os.makedirs('AIModel', exist_ok=True)
+        available_models = glob.glob('AIModel/*.pt')
+        
+        highest_version = 4 # Default fallback if no numbers are found
+        for m in available_models:
+            # Looks for "V4.pt", "V5.pt", etc., and extracts the number
+            match = re.search(r'V(\d+)\.pt$', m)
+            if match:
+                v = int(match.group(1))
+                if v > highest_version:
+                    highest_version = v
+                    
+        # 2. Increment the version number
+        new_version = highest_version + 1
+        new_filename = f"AIModelFinalV{new_version}.pt"
+        save_path = os.path.join('AIModel', new_filename)
+        
+        # 3. Save the new file from Colab
+        with open(save_path, "wb") as buffer:
+            buffer.write(await file.read())
+            
+        # 4. Hot-Swap the Active Model in Memory
+        print(f"🔄 COLAB UPLOAD RECEIVED! Hot-swapping to: {new_filename}")
+        model = YOLO(save_path)
+        active_model_name = new_filename
+        
+        # 5. Clear the flagged images from the database so they aren't trained on again
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE captured_images SET requires_retraining = FALSE, yolo_annotation = '' WHERE requires_retraining = TRUE")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("🧹 Cleared retraining queue for the next flight.")
+        
+        return {"status": "success", "new_version": new_filename}
+        
+    except Exception as e:
+        print(f"❌ Auto-Upload Failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # DATABASE CRUD ENDPOINTS 
