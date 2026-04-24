@@ -450,6 +450,20 @@ def flag_for_retraining(image_id: int):
         return {"status": "success"}
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/images/{image_id}/unflag")
+def unflag_from_retraining(image_id: int):
+    """Removes an image from the retraining queue and clears its annotation."""
+    try:
+        conn = psycopg2.connect(RAILWAY_DB_URL)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE captured_images SET requires_retraining = FALSE, yolo_annotation = '' WHERE id = %s", (image_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success"}
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/images/{image_id}/annotate")
 def save_annotation(image_id: int, payload: AnnotationUpdate):
     try:

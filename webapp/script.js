@@ -204,6 +204,48 @@ window.flagImageForRetraining = async function() {
     }
 };
 
+window.unflagImage = async function() {
+    if (!currentAnnotationImageId) return alert("Select an image first.");
+    if (!confirm("Are you sure you want to remove this image from the retraining queue?")) return;
+
+    const btn = document.querySelector('button[onclick="unflagImage()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "⏳...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${BASE_URL}/api/images/${currentAnnotationImageId}/unflag`, { method: 'POST' });
+        if (res.ok) {
+            // 1. Remove the image from the local array
+            flaggedImagesData = flaggedImagesData.filter(i => i.id !== currentAnnotationImageId);
+            
+            // 2. Reset the Canvas UI
+            currentAnnotationImageId = null;
+            currentRect = null;
+            document.getElementById('canvasPlaceholder').style.display = 'block';
+            const canvasEl = document.getElementById('annotationCanvas');
+            if(canvasEl) canvasEl.style.display = 'none';
+            
+            const badge = document.getElementById('annotationStatus');
+            if(badge) {
+                badge.innerText = "Select an Image";
+                badge.className = "health-badge badge-pending";
+            }
+
+            // 3. Re-render the grid (which will now be missing the unflagged image)
+            renderFlaggedGrid();
+        } else {
+            alert("Failed to unflag image.");
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Network error unflagging image.");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};
+
 async function loadRetrainingHub() {
     try {
         const res = await fetch(`${BASE_URL}/api/retraining/flagged?t=${new Date().getTime()}`);

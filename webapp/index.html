@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bridge Analytics Hub</title>
+    <link rel="icon" type="image/png" href="icon.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -14,14 +15,14 @@
         <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
         <ul>
             <li><a href="#" class="nav-link active" data-target="live-flight"
-                    style="color: #2563EB; font-weight: bold;">
+                    style="color: #070707; font-weight: bold;">
                     LIVE FLIGHT</a></li>
             <li><a href="#" class="nav-link" data-target="analytics">SYSTEM ANALYTICS</a></li>
             <li><a href="#" class="nav-link" data-target="bridges">BRIDGE DATABASE</a></li>
             <li><a href="#" class="nav-link" data-target="retraining"
-                    style="color: #8b5cf6; font-weight: bold; margin-top: 10px;">🧠 AI RETRAINING HUB</a></li>
+                    style="color: #070707; font-weight: bold; margin-top: 10px;">AI RETRAINING HUB</a></li>
             <li><a href="#" class="nav-link" data-target="settings"
-                    style="color: #64748B; font-weight: bold; margin-top: 20px; border-top: 1px solid #e2e8f0;">⚙️
+                    style="color: #64748B; font-weight: bold; margin-top: 20px; border-top: 1px solid #e2e8f0;">
                     SETTINGS</a></li>
         </ul>
     </div>
@@ -326,7 +327,7 @@
             <section id="retraining" class="content-section" style="display:none;">
                 <div class="bridge-header-bar">
                     <div>
-                        <h2 class="section-title" style="margin-bottom: 5px; color: #8b5cf6;">🧠 AI RETRAINING HUB</h2>
+                        <h2 class="section-title" style="margin-bottom: 5px; color: #8b5cf6;">AI RETRAINING HUB</h2>
                         <p class="text-muted" style="margin-top: 0;">Annotate flagged images to create a new YOLO
                             dataset for continuous learning.</p>
                     </div>
@@ -365,6 +366,9 @@
                                     style="font-size: 13px;">Select an Image</span>
                             </div>
                             <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-secondary" onclick="unflagImage()"
+                                    style="margin: 0; color: #ef4444; border-color: #fca5a5; background: #fef2f2;">Unflag</button>
+                                
                                 <button class="btn btn-secondary" onclick="clearAnnotationCanvas()"
                                     style="margin: 0;">🗑️ Clear Box</button>
                                 <button class="btn btn-primary" onclick="saveAnnotation()"
