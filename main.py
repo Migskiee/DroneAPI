@@ -424,7 +424,7 @@ def save_annotation(image_id: int, payload: AnnotationUpdate):
 
 @app.post("/api/retraining/push-to-cloud")
 def push_dataset_to_cloud():
-    print("📦 Packing dataset for Cloudinary transfer...")
+    print("📦 Packing dataset for direct Colab transfer...")
     try:
         conn = psycopg2.connect(RAILWAY_DB_URL)
         cursor = conn.cursor()
@@ -435,8 +435,12 @@ def push_dataset_to_cloud():
         if not dataset_images:
             raise HTTPException(status_code=400, detail="No annotated images available.")
 
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        # 1. Generate a unique filename using a timestamp
+        zip_filename = f"dataset_{int(time.time())}.zip"
+        zip_path = os.path.join(TEMP_DIR, zip_filename)
+        
+        # 2. Save the ZIP file DIRECTLY to Railway's internal storage
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
             yaml_content = """train: ./images/train
 val: ./images/train
 
@@ -459,19 +463,17 @@ names:
                 except Exception as e:
                     print(f"Skipped {img_id}: {e}")
 
-        zip_buffer.seek(0)
-        upload_result = cloudinary.uploader.upload(
-            zip_buffer, resource_type="raw", folder="bridge_datasets",
-            public_id=f"dataset_{int(time.time())}.zip"
-        )
-        secure_url = upload_result['secure_url']
+        # 3. Create the direct URL to the Railway server instead of Cloudinary
+        secure_url = f"https://dronebridgeanalytics.up.railway.app/temp_frames/{zip_filename}"
         
-        with state_lock: flight_state["latest_dataset_url"] = secure_url
-        print(f"✅ Dataset safely stored in cloud: {secure_url}")
+        with state_lock: 
+            flight_state["latest_dataset_url"] = secure_url
+            
+        print(f"✅ Dataset safely hosted on Railway: {secure_url}")
         return {"status": "success", "url": secure_url}
 
     except Exception as e:
-        print(f"❌ Failed to push dataset: {e}")
+        print(f"❌ Failed to pack dataset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/retraining/latest-dataset")
