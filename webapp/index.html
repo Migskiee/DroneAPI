@@ -353,7 +353,8 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <div style="display: flex; align-items: center; gap: 15px;">
-                                <select id="annotationClassSelect" class="form-control" style="width: 250px; font-weight: bold; background: #f8fafc;">
+                                <select id="annotationClassSelect" class="form-control"
+                                    style="width: 250px; font-weight: bold; background: #f8fafc;">
                                     <option value="0">Chipping</option>
                                     <option value="1">Crack</option>
                                     <option value="2">Exposed Rebar</option>
@@ -383,6 +384,103 @@
 
                     </div>
                 </div>
+                <div
+                    style="margin-top: 30px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 20px;">
+                        <h3 style="color: #0f172a; margin: 0;">🚀 Google Colab Retraining Guide</h3>
+                        <button id="copyColabBtn" class="btn btn-primary"
+                            style="margin: 0; background: #3b82f6; font-size: 14px; padding: 8px 16px;"
+                            onclick="copyColabCode()">
+                            📋 Copy Code
+                        </button>
+                    </div>
+
+                    <p style="color: #475569; font-size: 14px; margin-bottom: 15px; line-height: 1.6;">
+                        <strong>Step 1:</strong> Annotate your flagged images and click the <b>Push Dataset to Cloud</b>
+                        button above.<br>
+                        <strong>Step 2:</strong> Open a new <a href="https://colab.research.google.com/" target="_blank"
+                            style="color: #3b82f6; text-decoration: none; font-weight: bold;">Google Colab</a> notebook
+                        (ensure the T4 GPU runtime is enabled).<br>
+                        <strong>Step 3:</strong> Copy the code below, paste it into a cell, and click Run. The script is
+                        fully automated and will hot-swap the new AI model upon completion.
+                    </p>
+
+                    <div
+                        style="background: #0f172a; padding: 20px; border-radius: 6px; overflow-x: auto; position: relative;">
+                        <pre><code id="colabCodeSnippet" style="color: #38bdf8; font-family: monospace; font-size: 13px; line-height: 1.5;">import requests
+import urllib.request
+import os
+
+RAILWAY_URL = "https://dronebridgeanalytics.up.railway.app"
+
+print("📡 Contacting Railway GCS for latest dataset...")
+ds_response = requests.get(f"{RAILWAY_URL}/api/retraining/latest-dataset")
+
+if ds_response.status_code == 200:
+    dataset_url = ds_response.json()['url']
+    print(f"✅ Found dataset! Downloading from Railway...")
+    
+    # 1. Download and Unzip the Dataset
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    zip_response = requests.get(dataset_url, headers=headers)
+    
+    if zip_response.status_code == 200:
+        with open("bridge_dataset.zip", "wb") as f:
+            f.write(zip_response.content)
+            
+        !unzip -q -o bridge_dataset.zip
+        print("✅ Dataset unpacked.")
+        
+        # 2. Download the CURRENT ACTIVE MODEL
+        print("📡 Downloading the latest AI brain (.pt file) directly from Railway...")
+        model_response = requests.get(f"{RAILWAY_URL}/api/model/download-latest", headers=headers)
+        
+        if model_response.status_code == 200:
+            with open("latest_model.pt", "wb") as f:
+                f.write(model_response.content)
+            print("✅ Current Model downloaded.")
+            
+            # 3. Install YOLO and Train
+            !pip install ultralytics -q
+            from ultralytics import YOLO
+            
+            print("🧠 Initiating Neural Network Retraining ON TOP of the current knowledge...")
+            model = YOLO('latest_model.pt')
+            
+            # Note: We capture the output in a variable called 'results'
+            results = model.train(data='bridge_dataset/data.yaml', epochs=100, imgsz=640, freeze=10, lr0=0.0001, amp=False)
+            
+            # ==========================================
+            # NEW: AUTO-UPLOAD BACK TO WEB APP
+            # ==========================================
+            print("\n☁️ Training complete! Pushing the smarter brain back to the Web App...")
+            
+            # YOLO dynamically creates folders like train, train2, train3. 
+            # results.save_dir grabs the exact folder it just used!
+            best_weights_path = os.path.join(results.save_dir, 'weights', 'best.pt')
+            
+            upload_url = f"{RAILWAY_URL}/api/model/upload"
+            
+            with open(best_weights_path, 'rb') as f:
+                files = {'file': ('best.pt', f)}
+                upload_res = requests.post(upload_url, files=files)
+                
+            if upload_res.status_code == 200:
+                new_name = upload_res.json()['new_version']
+                print(f"🎉 SUCCESS! The web app has automatically upgraded to: {new_name}")
+                print("🧹 The database queue has been cleared for your next inspection flight.")
+            else:
+                print(f"❌ Failed to upload model back to Railway: {upload_res.text}")
+                
+        else:
+            print("❌ Error: Railway server did not provide the .pt file.")
+    else:
+        print("❌ Error downloading dataset ZIP.")
+else:
+    print("❌ Error: Railway server did not have a dataset ready. Did you click 'Push Dataset' in the app?")</code></pre>
+                    </div>
+                </div>
             </section>
 
             <section id="settings" class="content-section" style="display:none;">
@@ -394,16 +492,21 @@
                         style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 25px;">
                         🧠 Artificial Intelligence Configuration</h3>
 
-                    <div style="margin-bottom: 25px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div
+                        style="margin-bottom: 25px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <strong style="color: #334155; font-size: 15px;">Active AI Version Control</strong>
-                            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Select which neural network weights to load into production.</p>
+                            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Select which neural network
+                                weights to load into production.</p>
                         </div>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <select id="aiVersionSelect" class="form-control" style="margin: 0; width: auto; min-width: 220px; font-weight: bold; color: #4f46e5; border-color: #c7d2fe; background-color: #eef2ff;">
+                            <select id="aiVersionSelect" class="form-control"
+                                style="margin: 0; width: auto; min-width: 220px; font-weight: bold; color: #4f46e5; border-color: #c7d2fe; background-color: #eef2ff;">
                                 <option value="">Loading...</option>
                             </select>
-                            <button id="applyAiVersionBtn" class="btn btn-primary" style="margin: 0; padding: 10px 20px; font-size: 14px; background: #4f46e5; border-color: #4338ca;" onclick="applyAiVersion()">🔄 Load</button>
+                            <button id="applyAiVersionBtn" class="btn btn-primary"
+                                style="margin: 0; padding: 10px 20px; font-size: 14px; background: #4f46e5; border-color: #4338ca;"
+                                onclick="applyAiVersion()">🔄 Load</button>
                         </div>
                     </div>
 

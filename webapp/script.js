@@ -1412,6 +1412,34 @@ window.openBridgeModal = function(db_id = null) {
     if(modal) modal.style.display = 'flex';
 };
 
+// =========================================
+// COLAB CODE COPY FUNCTION
+// =========================================
+window.copyColabCode = function() {
+    const codeElement = document.getElementById('colabCodeSnippet');
+    const btn = document.getElementById('copyColabBtn');
+
+    // Copy the text inside the code block to the clipboard
+    navigator.clipboard.writeText(codeElement.innerText).then(() => {
+        const originalText = btn.innerHTML;
+        
+        // Provide visual feedback
+        btn.innerHTML = "✅ Copied!";
+        btn.style.background = "#10b981"; // Turn green
+        btn.style.borderColor = "#059669";
+
+        // Revert back after 2 seconds
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.style.background = "#3b82f6";
+            btn.style.borderColor = "transparent";
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        alert("Failed to copy code to clipboard.");
+    });
+};
+
 window.closeBridgeModal = function() {
     const modal = document.getElementById('bridgeModal');
     if(modal) modal.style.display = 'none';

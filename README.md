@@ -1,6 +1,5 @@
 # ** GOOGLE COLAB CODE ** For AI Training of the system
 
-//
 
 import requests
 import urllib.request
@@ -39,3 +38,38 @@ else:
 
 
 # this to be used in any google account just run this after pushing the datasets to the cloud in the webapp
+
+This Application are for academic purposes, This System is used for the software side of our drone
+the drone's goal is to detect defects on concrete bridges using computer vision or OpenCV, using the YOLO AI Model we achieve this goal and currently using for detection.
+
+System Tools and Software 
+
+Frontend :
+HTML5
+CSS
+Javascript
+
+Backend :
+Python
+
+Cloud Hosting: 
+Cloudinary
+Railway
+
+Database: 
+PostGreSQL
+
+AI MODEL:
+YOLOv11s
+
+RESEARCH PAPER TITLE:
+UNMANNED AERIAL VEHICLE FOR VISUAL INSPECTION OF CONCRETE BRIDGES
+
+GROUP:
+BALDADO, JOSE MIGUEL B.
+YAKIT, DIONESIO
+PLATA, ALMIRA
+CASARINO, NINO MELLORD
+GUIMBA, KARMELA
+AMOR, 
+ESPENIDA, LOUIE
