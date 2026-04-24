@@ -109,7 +109,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     fetchDatabaseStats();
+    fetchActiveAiVersion(); // NEW: Load active AI version on start
 });
+
+async function fetchActiveAiVersion() {
+    try {
+        const res = await fetch(`${BASE_URL}/api/model/current-version`);
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const badge = document.getElementById('activeAiVersionBadge');
+            if (badge) {
+                badge.innerText = data.version;
+            }
+        }
+    } catch(e) {
+        console.error("Error fetching model version", e);
+        const badge = document.getElementById('activeAiVersionBadge');
+        if (badge) {
+            badge.innerText = "Connection Error";
+            badge.style.background = "#fee2e2";
+            badge.style.color = "#b91c1c";
+            badge.style.borderColor = "#fca5a5";
+        }
+    }
+}
 
 // =========================================
 // ACTIVE LEARNING FUNCTIONS

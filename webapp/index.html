@@ -13,12 +13,16 @@
     <div class="left-container">
         <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
         <ul>
-            <li><a href="#" class="nav-link active" data-target="live-flight" style="color: #2563EB; font-weight: bold;">
+            <li><a href="#" class="nav-link active" data-target="live-flight"
+                    style="color: #2563EB; font-weight: bold;">
                     LIVE FLIGHT</a></li>
             <li><a href="#" class="nav-link" data-target="analytics">SYSTEM ANALYTICS</a></li>
             <li><a href="#" class="nav-link" data-target="bridges">BRIDGE DATABASE</a></li>
-            <li><a href="#" class="nav-link" data-target="retraining" style="color: #8b5cf6; font-weight: bold; margin-top: 10px;">🧠 AI RETRAINING HUB</a></li>
-            <li><a href="#" class="nav-link" data-target="settings" style="color: #64748B; font-weight: bold; margin-top: 20px; border-top: 1px solid #e2e8f0;">⚙️ SETTINGS</a></li>
+            <li><a href="#" class="nav-link" data-target="retraining"
+                    style="color: #8b5cf6; font-weight: bold; margin-top: 10px;">🧠 AI RETRAINING HUB</a></li>
+            <li><a href="#" class="nav-link" data-target="settings"
+                    style="color: #64748B; font-weight: bold; margin-top: 20px; border-top: 1px solid #e2e8f0;">⚙️
+                    SETTINGS</a></li>
         </ul>
     </div>
 
@@ -54,7 +58,8 @@
                                 style="font-size: 16px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px;">
                                 Live Camera Captures</h3>
                             <div id="liveCaptureGallery" class="live-gallery">
-                                <p class="text-muted" style="margin-top: 10px;">Awaiting mission start to begin capture...</p>
+                                <p class="text-muted" style="margin-top: 10px;">Awaiting mission start to begin
+                                    capture...</p>
                             </div>
                         </div>
                     </div>
@@ -76,8 +81,11 @@
                         </div>
                         <input type="hidden" id="flightSpanInput" value="">
 
-                        <label style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 10px; display: block;">Capture Protocol:</label>
-                        <select id="flightCaptureMode" class="form-control" style="font-weight: bold; background-color: #f8fafc; border: 2px solid #cbd5e1;">
+                        <label
+                            style="font-size: 13px; font-weight: bold; color: #64748B; margin-top: 10px; display: block;">Capture
+                            Protocol:</label>
+                        <select id="flightCaptureMode" class="form-control"
+                            style="font-weight: bold; background-color: #f8fafc; border: 2px solid #cbd5e1;">
                             <option value="auto">AUTO MODE</option>
                             <option value="manual">MANUAL MODE</option>
                         </select>
@@ -86,7 +94,7 @@
                             style="background: #10B981; font-size: 16px; padding: 15px; margin-top: 20px;">
                             ▶ START MISSION
                         </button>
-                        
+
                         <button id="manualCaptureBtn" class="btn btn-primary" onclick="triggerManualCapture()"
                             style="background: #3b82f6; font-size: 16px; padding: 15px; margin-top: 10px; display: none; width: 100%; border: 2px solid #1d4ed8; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
                             📸 SNAP PHOTO NOW
@@ -122,18 +130,22 @@
                     </div>
                     <div class="analytics-details-panel">
                         <h3>Health Condition Breakdown</h3>
-                        <p class="text-muted">Current structural condition of registered bridges based on their most recent flight mission.</p>
+                        <p class="text-muted">Current structural condition of registered bridges based on their most
+                            recent flight mission.</p>
                         <ul class="condition-list stats-list">
                             <li>
-                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Bad (Critical Repair Needed)</strong></div>
+                                <div class="label-group"><span class="color-dot dot-bad"></span> <strong>Bad (Critical
+                                        Repair Needed)</strong></div>
                                 <span class="stat-value" id="countHigh">0</span>
                             </li>
                             <li>
-                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Poor (Requires Maintenance)</strong></div>
+                                <div class="label-group"><span class="color-dot dot-poor"></span> <strong>Poor (Requires
+                                        Maintenance)</strong></div>
                                 <span class="stat-value" id="countReview">0</span>
                             </li>
                             <li>
-                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Fair / Good (Safe)</strong></div>
+                                <div class="label-group"><span class="color-dot dot-good"></span> <strong>Fair / Good
+                                        (Safe)</strong></div>
                                 <span class="stat-value" id="countLow">0</span>
                             </li>
                         </ul>
@@ -152,15 +164,18 @@
                     <div class="bridge-header-bar">
                         <h2 class="section-title">BRIDGE DATABASE</h2>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="text" id="bridgeSearch" class="search-input" placeholder="Search by name or location...">
-                            <button class="btn btn-primary" onclick="openBridgeModal()" style="padding: 10px 15px; font-size: 14px;">➕ Add New Bridge</button>
+                            <input type="text" id="bridgeSearch" class="search-input"
+                                placeholder="Search by name or location...">
+                            <button class="btn btn-primary" onclick="openBridgeModal()"
+                                style="padding: 10px 15px; font-size: 14px;">➕ Add New Bridge</button>
                         </div>
                     </div>
                     <div class="bridge-grid" id="bridgeGrid"></div>
                 </div>
 
                 <div id="bridgeDetailView" style="display:none;">
-                    <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to Database</button>
+                    <button id="backToBridges" class="btn btn-secondary" onclick="showBridgeList()">← Back to
+                        Database</button>
                     <div class="detail-header">
                         <h2 id="detailName">Loading...</h2>
                         <p id="detailLocation" class="text-muted">Loading...</p>
@@ -171,7 +186,8 @@
                         <div class="bridge-overview-row">
                             <div class="detail-analytics chart-section">
                                 <h3>Latest Mission Defect Distribution</h3>
-                                <p class="text-muted" id="latestMissionChartDesc">Defect breakdown from the most recent flight.</p>
+                                <p class="text-muted" id="latestMissionChartDesc">Defect breakdown from the most recent
+                                    flight.</p>
                                 <div class="chart-container">
                                     <canvas id="defectChart"></canvas>
                                 </div>
@@ -179,15 +195,19 @@
                             <div class="detail-analytics remarks-section">
                                 <h3>Structure Condition & Remarks</h3>
                                 <div id="bridgeConditionBadge" class="status-badge">Loading...</div>
-                                <p class="text-muted" style="margin-bottom: 5px; font-size: 13px;">Engineering Remarks:</p>
-                                <textarea id="bridgeRemarks" class="form-control" rows="6" placeholder="Loading remarks..."></textarea>
-                                <button class="btn btn-primary" style="margin-top: 15px; width: 100%;" onclick="saveBridgeRemarks()">💾 Save Remarks</button>
+                                <p class="text-muted" style="margin-bottom: 5px; font-size: 13px;">Engineering Remarks:
+                                </p>
+                                <textarea id="bridgeRemarks" class="form-control" rows="6"
+                                    placeholder="Loading remarks..."></textarea>
+                                <button class="btn btn-primary" style="margin-top: 15px; width: 100%;"
+                                    onclick="saveBridgeRemarks()">💾 Save Remarks</button>
                             </div>
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
                             <h3>Historical Flight Mission Logs</h3>
-                            <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to view its captured telemetry and images.</p>
+                            <p class="text-muted" style="margin-bottom: 15px;">Select a specific drone flight mission to
+                                view its captured telemetry and images.</p>
                             <div id="missionListGrid" class="mission-grid"></div>
                         </div>
                     </div>
@@ -200,24 +220,37 @@
                         <p id="missionDetailSubtitle" class="text-muted">Loading...</p>
                     </div>
 
-                    <div id="missionActionContainer" style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #8b5cf6; display: none;">
+                    <div id="missionActionContainer"
+                        style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px dashed #8b5cf6; display: none;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <h3 id="aiActionTitle" style="margin-bottom: 5px; color: #0f172a;">Data Ready for Analysis</h3>
-                                <p id="aiActionDesc" class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO AI.</p>
+                                <h3 id="aiActionTitle" style="margin-bottom: 5px; color: #0f172a;">Data Ready for
+                                    Analysis</h3>
+                                <p id="aiActionDesc" class="text-muted" style="margin-bottom: 0; font-size: 14px;">Raw
+                                    images securely backed up. Configure parameters in <b>Settings</b>, then run YOLO
+                                    AI.</p>
                             </div>
                             <div style="display: flex; gap: 10px;">
-                                <button id="emergencyResetBtn" class="btn btn-secondary" style="display: none; background: #ef4444; color: white; font-weight: bold; border: none; padding: 15px 20px;" onclick="forceResetMission()">
+                                <button id="emergencyResetBtn" class="btn btn-secondary"
+                                    style="display: none; background: #ef4444; color: white; font-weight: bold; border: none; padding: 15px 20px;"
+                                    onclick="forceResetMission()">
                                     ⚠️ FORCE RESET
                                 </button>
-                                <button id="runAiBtn" class="btn btn-primary" style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; font-weight: 800; letter-spacing: 1px;" onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
+                                <button id="runAiBtn" class="btn btn-primary"
+                                    style="background: #8b5cf6; font-size: 16px; padding: 15px 30px; font-weight: 800; letter-spacing: 1px;"
+                                    onclick="startAiAnalysis()">🧠 RUN AI ANALYSIS</button>
                             </div>
                         </div>
-                        
-                        <div id="analysisProgressBarContainer" style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
-                            <div id="analysisProgressBar" style="width: 0%; height: 100%; background: #8b5cf6; transition: width 0.3s ease;"></div>
+
+                        <div id="analysisProgressBarContainer"
+                            style="display: none; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 20px; height: 12px; overflow: hidden;">
+                            <div id="analysisProgressBar"
+                                style="width: 0%; height: 100%; background: #8b5cf6; transition: width 0.3s ease;">
+                            </div>
                         </div>
-                        <p id="analysisProgressText" style="display: none; text-align: center; font-size: 13px; color: #64748b; margin-top: 8px; font-weight: bold;">0 / 0 Frames Analyzed</p>
+                        <p id="analysisProgressText"
+                            style="display: none; text-align: center; font-size: 13px; color: #64748b; margin-top: 8px; font-weight: bold;">
+                            0 / 0 Frames Analyzed</p>
                     </div>
 
                     <div class="detail-layout" style="display: flex; flex-direction: column; gap: 30px;">
@@ -230,26 +263,38 @@
                         </div>
 
                         <div class="detail-analytics" style="width: 100%;">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
                                 <div>
                                     <h3>Inspection Image Gallery</h3>
-                                    <p class="text-muted" style="margin-bottom: 0;">Separated by detected defects and raw/safe captures.</p>
+                                    <p class="text-muted" style="margin-bottom: 0;">Separated by detected defects and
+                                        raw/safe captures.</p>
                                 </div>
                                 <div style="display: flex; gap: 15px; align-items: center;">
                                     <div id="deleteControls" style="display: flex; align-items: center; gap: 10px;">
-                                        <button id="startDeleteBtn" class="btn btn-secondary" style="margin:0; padding: 8px 12px; font-size: 13px;" onclick="toggleDeleteMode()">
+                                        <button id="startDeleteBtn" class="btn btn-secondary"
+                                            style="margin:0; padding: 8px 12px; font-size: 13px;"
+                                            onclick="toggleDeleteMode()">
                                             🗑️ Select Images to Delete
                                         </button>
-                                        <div id="activeDeleteControls" style="display: none; gap: 10px; align-items: center;">
-                                            <span id="deleteCount" style="font-size: 14px; font-weight: bold; color: #ef4444;">0 Selected</span>
-                                            <button class="btn btn-secondary" style="margin:0; padding: 8px 12px; font-size: 13px;" onclick="cancelDeleteMode()">Cancel</button>
-                                            <button class="btn btn-primary" style="margin:0; padding: 8px 12px; font-size: 13px; background: #ef4444; border: none;" onclick="confirmBulkDelete()">
+                                        <div id="activeDeleteControls"
+                                            style="display: none; gap: 10px; align-items: center;">
+                                            <span id="deleteCount"
+                                                style="font-size: 14px; font-weight: bold; color: #ef4444;">0
+                                                Selected</span>
+                                            <button class="btn btn-secondary"
+                                                style="margin:0; padding: 8px 12px; font-size: 13px;"
+                                                onclick="cancelDeleteMode()">Cancel</button>
+                                            <button class="btn btn-primary"
+                                                style="margin:0; padding: 8px 12px; font-size: 13px; background: #ef4444; border: none;"
+                                                onclick="confirmBulkDelete()">
                                                 🗑️ Delete Selected
                                             </button>
                                         </div>
                                     </div>
                                     <div class="gallery-filters">
-                                        <select id="filterType" class="form-control filter-select" onchange="applyGalleryFilters()">
+                                        <select id="filterType" class="form-control filter-select"
+                                            onchange="applyGalleryFilters()">
                                             <option value="all">All Images</option>
                                             <option value="Raw Image">Raw / Safe Images</option>
                                             <option value="Chipping">Chipping</option>
@@ -262,12 +307,14 @@
                                 </div>
                             </div>
 
-                            <h4 style="margin-top: 25px; margin-bottom: 15px; color: #ef4444; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+                            <h4
+                                style="margin-top: 25px; margin-bottom: 15px; color: #ef4444; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
                                 🚨 Detected Defects
                             </h4>
                             <div id="galleryContainerDefects"></div>
 
-                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 35px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 35px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
                                 <h4 style="margin: 0; color: #10b981;">✅ Raw & Safe Captures</h4>
                             </div>
                             <div id="galleryContainerRaw"></div>
@@ -280,74 +327,113 @@
                 <div class="bridge-header-bar">
                     <div>
                         <h2 class="section-title" style="margin-bottom: 5px; color: #8b5cf6;">🧠 AI RETRAINING HUB</h2>
-                        <p class="text-muted" style="margin-top: 0;">Annotate flagged images to create a new YOLO dataset for continuous learning.</p>
+                        <p class="text-muted" style="margin-top: 0;">Annotate flagged images to create a new YOLO
+                            dataset for continuous learning.</p>
                     </div>
-                    <button class="btn btn-primary" onclick="exportYoloDataset()" style="background: #8b5cf6; padding: 12px 20px; font-size: 14px; font-weight: bold;">
+                    <button class="btn btn-primary" onclick="exportYoloDataset()"
+                        style="background: #8b5cf6; padding: 12px 20px; font-size: 14px; font-weight: bold;">
                         ☁️ Push Dataset to Cloud
                     </button>
                 </div>
-                
+
                 <div style="display: flex; gap: 20px;">
-                    <div style="flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); height: 70vh; overflow-y: auto;">
-                        <h3 style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 15px;">Flagged Captures</h3>
-                        <p id="retrainEmptyMsg" class="text-muted" style="font-size: 13px;">No images currently flagged. Flag false positives in the Database.</p>
+                    <div
+                        style="flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); height: 70vh; overflow-y: auto;">
+                        <h3
+                            style="color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; margin-bottom: 15px;">
+                            Flagged Captures</h3>
+                        <p id="retrainEmptyMsg" class="text-muted" style="font-size: 13px;">No images currently flagged.
+                            Flag false positives in the Database.</p>
                         <div id="retrainImageGrid" style="display: grid; grid-template-columns: 1fr; gap: 15px;"></div>
                     </div>
 
-                    <div style="flex: 3; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div
+                        style="flex: 3; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
+
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <div style="display: flex; align-items: center; gap: 15px;">
-                                <select id="annotationClassSelect" class="form-control" style="width: 250px; font-weight: bold; background: #f8fafc;">
-                                    <option value="0">Crack</option>
-                                    <option value="1">Flaking</option>
-                                    <option value="2">Chipping</option>
-                                    <option value="3">Exposed Rebar</option>
+                                <select id="annotationClassSelect" class="form-control"
+                                    style="width: 250px; font-weight: bold; background: #f8fafc;">
+                                    <option value="0">Chipping</option>
+                                    <option value="1">Crack</option>
+                                    <option value="2">Exposed Rebar</option>
+                                    <option value="3">Flaking</option>
                                     <option value="4">Water Infiltration</option>
                                 </select>
-                                <span id="annotationStatus" class="health-badge badge-pending" style="font-size: 13px;">Select an Image</span>
+                                <span id="annotationStatus" class="health-badge badge-pending"
+                                    style="font-size: 13px;">Select an Image</span>
                             </div>
                             <div style="display: flex; gap: 10px;">
-                                <button class="btn btn-secondary" onclick="clearAnnotationCanvas()" style="margin: 0;">🗑️ Clear Box</button>
-                                <button class="btn btn-primary" onclick="saveAnnotation()" style="margin: 0; background: #10b981;">💾 Save Annotation</button>
+                                <button class="btn btn-secondary" onclick="clearAnnotationCanvas()"
+                                    style="margin: 0;">🗑️ Clear Box</button>
+                                <button class="btn btn-primary" onclick="saveAnnotation()"
+                                    style="margin: 0; background: #10b981;">💾 Save Annotation</button>
                             </div>
                         </div>
 
-                        <div id="canvasContainer" style="flex: 1; background: #020617; border-radius: 8px; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; border: 2px solid #334155;">
-                            <p id="canvasPlaceholder" style="color: #64748b; font-weight: bold;">Click an image on the left to begin annotating.</p>
-                            <canvas id="annotationCanvas" style="display: none; cursor: crosshair; max-width: 100%; max-height: 100%;"></canvas>
+                        <div id="canvasContainer"
+                            style="flex: 1; background: #020617; border-radius: 8px; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; border: 2px solid #334155;">
+                            <p id="canvasPlaceholder" style="color: #64748b; font-weight: bold;">Click an image on the
+                                left to begin annotating.</p>
+                            <canvas id="annotationCanvas"
+                                style="display: none; cursor: crosshair; max-width: 100%; max-height: 100%;"></canvas>
                         </div>
-                        <p class="text-muted" style="margin-top: 10px; font-size: 12px; text-align: center;">Click and drag on the image to draw a bounding box around the exact defect.</p>
-                        
+                        <p class="text-muted" style="margin-top: 10px; font-size: 12px; text-align: center;">Click and
+                            drag on the image to draw a bounding box around the exact defect.</p>
+
                     </div>
                 </div>
             </section>
 
             <section id="settings" class="content-section" style="display:none;">
                 <h2 class="section-title">SYSTEM SETTINGS</h2>
-                
-                <div style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-width: 800px;">
-                    <h3 style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 25px;">🧠 Artificial Intelligence Configuration</h3>
-                    
+
+                <div
+                    style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-width: 800px;">
+                    <h3
+                        style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 25px;">
+                        🧠 Artificial Intelligence Configuration</h3>
+
+                    <div style="margin-bottom: 25px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="color: #334155; font-size: 15px;">Active AI Version</strong>
+                            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">The neural network weights currently loaded in production.</p>
+                        </div>
+                        <span id="activeAiVersionBadge" class="badge badge-online" style="background: #eef2ff; color: #4f46e5; font-size: 14px; padding: 8px 16px; border: 1px solid #c7d2fe;">
+                            Loading...
+                        </span>
+                    </div>
+
                     <div style="margin-bottom: 30px;">
-                        <label style="font-size: 15px; font-weight: bold; color: #334155; display: flex; justify-content: space-between; margin-bottom: 10px;">
-                            Confidence Threshold <span id="confDisplay" style="color: #3b82f6; font-size: 18px;">50%</span>
+                        <label
+                            style="font-size: 15px; font-weight: bold; color: #334155; display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            Confidence Threshold <span id="confDisplay"
+                                style="color: #3b82f6; font-size: 18px;">50%</span>
                         </label>
-                        <input type="range" id="aiConfSlider" min="10" max="95" value="50" style="width: 100%; cursor: pointer;">
-                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Lower to find faint defects, raise to ignore false positives.</p>
+                        <input type="range" id="aiConfSlider" min="10" max="95" value="50"
+                            style="width: 100%; cursor: pointer;">
+                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Lower to find faint defects, raise
+                            to ignore false positives.</p>
                     </div>
 
                     <div style="margin-bottom: 35px;">
-                        <label style="font-size: 15px; font-weight: bold; color: #334155; margin-bottom: 10px; display: block;">Image Resolution (imgsz)</label>
-                        <select id="aiImgSizeSelect" class="form-control" style="padding: 12px; font-size: 15px; width: 100%; max-width: 400px;">
+                        <label
+                            style="font-size: 15px; font-weight: bold; color: #334155; margin-bottom: 10px; display: block;">Image
+                            Resolution (imgsz)</label>
+                        <select id="aiImgSizeSelect" class="form-control"
+                            style="padding: 12px; font-size: 15px; width: 100%; max-width: 400px;">
                             <option value="640">640px (Standard & Fast)</option>
                             <option value="800">800px (Detailed)</option>
                             <option value="1024">1024px (Deep Scan - Slow)</option>
                         </select>
-                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Higher resolutions improve small defect detection but require more server RAM processing time.</p>
+                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">Higher resolutions improve small
+                            defect detection but require more server RAM processing time.</p>
                     </div>
-                    
-                    <button id="saveSettingsBtn" class="btn btn-primary" style="background: #10b981; font-size: 16px; padding: 12px 25px;" onclick="saveAiSettings()">💾 Save Configuration</button>
+
+                    <button id="saveSettingsBtn" class="btn btn-primary"
+                        style="background: #10b981; font-size: 16px; padding: 12px 25px;" onclick="saveAiSettings()">💾
+                        Save Configuration</button>
                 </div>
             </section>
 
@@ -388,16 +474,22 @@
             </div>
             <div class="preview-info-section">
                 <span class="close-preview" onclick="closeImagePreview(event)">×</span>
-                <h3 style="color: #0f172a; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; padding-right: 30px;">Analysis Details</h3>
-                
-                <button id="flagRetrainBtn" class="btn btn-primary" style="background: #8b5cf6; width: 100%; margin-bottom: 25px; font-weight: bold; border: 2px solid #7c3aed;" onclick="flagImageForRetraining()">
+                <h3
+                    style="color: #0f172a; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; padding-right: 30px;">
+                    Analysis Details</h3>
+
+                <button id="flagRetrainBtn" class="btn btn-primary"
+                    style="background: #8b5cf6; width: 100%; margin-bottom: 25px; font-weight: bold; border: 2px solid #7c3aed;"
+                    onclick="flagImageForRetraining()">
                     🚩 AI Missed Something (Flag)
                 </button>
 
                 <div class="preview-info-row">
                     <span class="preview-info-label">Bridge Name</span>
-                    <span class="preview-info-value" id="previewBridgeName" style="font-weight: bold; color: #1e293b;">Loading...</span>
-                    <span id="previewBridgeCode" class="badge badge-online" style="margin-top: 5px; width: fit-content; background: #e2e8f0; color: #475569;">Loading...</span>
+                    <span class="preview-info-value" id="previewBridgeName"
+                        style="font-weight: bold; color: #1e293b;">Loading...</span>
+                    <span id="previewBridgeCode" class="badge badge-online"
+                        style="margin-top: 5px; width: fit-content; background: #e2e8f0; color: #475569;">Loading...</span>
                 </div>
 
                 <div class="preview-info-row">
@@ -407,44 +499,57 @@
 
                 <div class="preview-info-row">
                     <span class="preview-info-label">AI Confidence</span>
-                    <span class="preview-info-value" id="previewConfidence" style="font-weight: 800; color: #3b82f6;">Loading...</span>
+                    <span class="preview-info-value" id="previewConfidence"
+                        style="font-weight: 800; color: #3b82f6;">Loading...</span>
                 </div>
-                
+
                 <div class="preview-info-row">
                     <span class="preview-info-label">Severity Level</span>
                     <span class="preview-info-value" id="previewSeverity">Loading...</span>
                 </div>
-                
+
                 <div class="preview-info-row">
                     <span class="preview-info-label">Defect Size</span>
-                    <span class="preview-info-value" id="previewSize" style="font-family: monospace; font-size: 15px; background: #f1f5f9; padding: 4px 8px; border-radius: 4px; display: inline-block; width: fit-content;">N/A</span>
+                    <span class="preview-info-value" id="previewSize"
+                        style="font-family: monospace; font-size: 15px; background: #f1f5f9; padding: 4px 8px; border-radius: 4px; display: inline-block; width: fit-content;">N/A</span>
                 </div>
-                
+
                 <div class="preview-info-row">
                     <span class="preview-info-label">Location</span>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span class="preview-info-value" id="previewSpan">Loading...</span>
-                        <button id="addAttrBtn" class="btn btn-secondary" style="margin:0; padding: 2px 8px; font-size: 12px; border-radius: 5px; background: #e2e8f0; border: none; color: #475569; font-weight: bold; cursor: pointer;" onclick="toggleAttributeInput()" title="Add Custom Attribute">+ Note</button>
+                        <button id="addAttrBtn" class="btn btn-secondary"
+                            style="margin:0; padding: 2px 8px; font-size: 12px; border-radius: 5px; background: #e2e8f0; border: none; color: #475569; font-weight: bold; cursor: pointer;"
+                            onclick="toggleAttributeInput()" title="Add Custom Attribute">+ Note</button>
                     </div>
-                    
-                    <div id="attributeInputContainer" style="display: none; margin-top: 8px; gap: 5px; align-items: center;">
-                        <input type="text" id="customAttributeInput" class="form-control" placeholder="e.g. East pillar joint" style="padding: 6px; font-size: 13px; width: 100%;">
-                        <button class="btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px; background: #10b981; border: none;" onclick="saveImageAttribute()">Save</button>
+
+                    <div id="attributeInputContainer"
+                        style="display: none; margin-top: 8px; gap: 5px; align-items: center;">
+                        <input type="text" id="customAttributeInput" class="form-control"
+                            placeholder="e.g. East pillar joint" style="padding: 6px; font-size: 13px; width: 100%;">
+                        <button class="btn btn-primary"
+                            style="margin: 0; padding: 6px 12px; font-size: 12px; background: #10b981; border: none;"
+                            onclick="saveImageAttribute()">Save</button>
                     </div>
-                    
-                    <p id="previewAttributeText" class="text-muted" style="margin-top: 5px; font-size: 13px; font-style: italic; color: #64748b; display: none;"></p>
+
+                    <p id="previewAttributeText" class="text-muted"
+                        style="margin-top: 5px; font-size: 13px; font-style: italic; color: #64748b; display: none;">
+                    </p>
                 </div>
-                
+
                 <div class="preview-info-row">
                     <span class="preview-info-label">Date Captured</span>
-                    <span class="preview-info-value" id="previewDate" style="font-size: 14px; color: #64748b;">Loading...</span>
+                    <span class="preview-info-value" id="previewDate"
+                        style="font-size: 14px; color: #64748b;">Loading...</span>
                 </div>
 
                 <div class="preview-info-row">
                     <span class="preview-info-label">GPS Coordinates</span>
                     <span class="preview-info-value" id="previewGPS" style="font-size: 14px;">
-                        <a href="#" id="gpsMapLink" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: bold;">📍 View on Map</a>
-                        <span id="gpsTextDisplay" style="display: block; margin-top: 4px; color: #64748b; font-size: 12px; font-family: monospace;"></span>
+                        <a href="#" id="gpsMapLink" target="_blank"
+                            style="color: #3b82f6; text-decoration: none; font-weight: bold;">📍 View on Map</a>
+                        <span id="gpsTextDisplay"
+                            style="display: block; margin-top: 4px; color: #64748b; font-size: 12px; font-family: monospace;"></span>
                     </span>
                 </div>
 

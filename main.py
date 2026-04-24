@@ -88,19 +88,24 @@ class AnalyzeParams(BaseModel):
 # ==========================================
 # CLOUD AI & LIVE STREAMING STATE
 # ==========================================
+active_model_name = "Unknown"
+
 try:
     available_models = glob.glob('AIModel/*.pt')
     if available_models:
         available_models.sort(reverse=True)
         latest_model = available_models[0]
+        active_model_name = os.path.basename(latest_model)
         print(f"🔄 Auto-detecting AI... Loading newest weights: {latest_model}")
         model = YOLO(latest_model)
         print("✅ YOLO Model Loaded Successfully!")
     else:
-        model = YOLO('AIModel/AIModelFinalV4.pt')
+        active_model_name = "AIModelFinalV4.pt"
+        model = YOLO(f'AIModel/{active_model_name}')
 except Exception as e:
     print(f"⚠️ Warning: YOLO Model failed to load. {e}")
     model = None
+    active_model_name = "Error loading model"
 
 flight_state = {
     "is_active": False,
@@ -435,22 +440,16 @@ def push_dataset_to_cloud():
         if not dataset_images:
             raise HTTPException(status_code=400, detail="No annotated images available.")
 
-        # 1. Generate a unique filename using a timestamp
         zip_filename = f"dataset_{int(time.time())}.zip"
         zip_path = os.path.join(TEMP_DIR, zip_filename)
         
-        # 2. Save the ZIP file DIRECTLY to Railway's internal storage
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            
             yaml_content = """train: ./images/train
 val: ./images/train
 
 nc: 5
-names:
-  0: Crack
-  1: Flaking
-  2: Chipping
-  3: Exposed Rebar
-  4: Water Infiltration
+names: ['Chipping', 'Crack', 'Exposed Rebar', 'Flaking', 'Water Infiltration']
 """
             zip_file.writestr("bridge_dataset/data.yaml", yaml_content)
 
@@ -463,7 +462,6 @@ names:
                 except Exception as e:
                     print(f"Skipped {img_id}: {e}")
 
-        # 3. Create the direct URL to the Railway server instead of Cloudinary
         secure_url = f"https://dronebridgeanalytics.up.railway.app/temp_frames/{zip_filename}"
         
         with state_lock: 
@@ -494,7 +492,7 @@ def get_flagged_images():
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# NEW: COLAB MODEL DOWNLOAD ENDPOINT
+# COLAB MODEL DOWNLOAD ENDPOINT
 # ==========================================
 @app.get("/api/model/download-latest")
 def download_latest_model():
@@ -510,6 +508,11 @@ def download_latest_model():
         return FileResponse(latest, filename=os.path.basename(latest))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/model/current-version")
+def get_current_model_version():
+    """Returns the filename of the currently loaded YOLO model."""
+    return {"status": "success", "version": active_model_name}
 
 # ==========================================
 # DATABASE CRUD ENDPOINTS 
