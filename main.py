@@ -743,6 +743,29 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 web_path = os.path.join(BASE_DIR, "webapp")
 if not os.path.exists(web_path): os.makedirs(web_path)
 
+# ==========================================
+# FAVICON EXPLICIT ROUTE
+# ==========================================
+@app.get("/icon.png", include_in_schema=False)
+@app.get("/favicon.ico", include_in_schema=False) # Catches default browser behavior
+def favicon():
+    """Forces FastAPI to serve the icon if the static mount misses it."""
+    # Look in the webapp folder first
+    icon_path = os.path.join(BASE_DIR, "webapp", "icon.png")
+    if os.path.exists(icon_path):
+        return FileResponse(icon_path)
+    
+    # Fallback: Look in the root folder just in case
+    root_path = os.path.join(BASE_DIR, "icon.png")
+    if os.path.exists(root_path):
+        return FileResponse(root_path)
+        
+    raise HTTPException(status_code=404, detail="icon.png file missing from GitHub repository")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+web_path = os.path.join(BASE_DIR, "webapp")
+if not os.path.exists(web_path): os.makedirs(web_path)
+
 app.mount("/temp_frames", StaticFiles(directory=TEMP_DIR), name="temp_frames")
 app.mount("/", StaticFiles(directory=web_path, html=True), name="web")
 
