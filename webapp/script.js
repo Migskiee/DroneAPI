@@ -20,13 +20,15 @@ let flaggedImagesData = [];
 let currentAnnotationImageId = null;
 let isDrawing = false;
 let startX = 0; let startY = 0;
+
+// Multi-box array
 let currentAnnotations = []; 
 let currentRect = null; 
 
 const canvas = document.getElementById('annotationCanvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 let bgImage = new Image();
-bgImage.crossOrigin = "Anonymous";
+bgImage.crossOrigin = "Anonymous"; 
 
 document.addEventListener('DOMContentLoaded', () => {
     const navLinks = document.querySelectorAll('.nav-link');
@@ -111,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     fetchDatabaseStats();
-    fetchAvailableModels(); // Load models into the dropdown
+    fetchAvailableModels(); 
 });
 
 async function fetchAvailableModels() {
@@ -164,7 +166,7 @@ window.applyAiVersion = async function() {
         if (res.ok && data.status === 'success') {
             btn.innerHTML = "✅ Brain Swapped!";
             btn.style.background = "#10b981";
-            fetchAvailableModels(); // Refresh to move the 🟢 dot
+            fetchAvailableModels(); 
         } else {
             alert("Failed to load model.");
             btn.innerHTML = originalText;
@@ -218,12 +220,12 @@ window.unflagImage = async function() {
     try {
         const res = await fetch(`${BASE_URL}/api/images/${currentAnnotationImageId}/unflag`, { method: 'POST' });
         if (res.ok) {
-            // 1. Remove the image from the local array
             flaggedImagesData = flaggedImagesData.filter(i => i.id !== currentAnnotationImageId);
             
-            // 2. Reset the Canvas UI
             currentAnnotationImageId = null;
             currentRect = null;
+            currentAnnotations = [];
+            
             document.getElementById('canvasPlaceholder').style.display = 'block';
             const canvasEl = document.getElementById('annotationCanvas');
             if(canvasEl) canvasEl.style.display = 'none';
@@ -234,7 +236,6 @@ window.unflagImage = async function() {
                 badge.className = "health-badge badge-pending";
             }
 
-            // 3. Re-render the grid (which will now be missing the unflagged image)
             renderFlaggedGrid();
         } else {
             alert("Failed to unflag image.");
@@ -243,8 +244,10 @@ window.unflagImage = async function() {
         console.error(e);
         alert("Network error unflagging image.");
     } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+        if(btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     }
 };
 
@@ -293,7 +296,7 @@ function renderFlaggedGrid() {
 function loadCanvasImage(imgData) {
     currentAnnotationImageId = imgData.id;
     currentRect = null;
-    currentAnnotations = []; // Reset the array for the new image
+    currentAnnotations = []; 
     document.getElementById('canvasPlaceholder').style.display = 'none';
     
     const badge = document.getElementById('annotationStatus');
@@ -308,7 +311,6 @@ function loadCanvasImage(imgData) {
         canvas.height = bgImage.height;
         ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
         
-        // Load multiple existing lines from the database
         if(imgData.annotation) {
             const lines = imgData.annotation.trim().split('\n');
             lines.forEach(line => {
@@ -328,7 +330,7 @@ function loadCanvasImage(imgData) {
                 }
             });
         }
-        draw(); // Instantly draw the loaded boxes
+        draw(); 
     };
     bgImage.src = imgData.url;
 }
@@ -350,31 +352,29 @@ function draw(e) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
     
-    // UI Colors for different defect classes
     const classColors = ['#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#06b6d4'];
     const selectDropdown = document.getElementById('annotationClassSelect');
 
-    // 1. Draw all previously saved boxes in the array
     currentAnnotations.forEach(ann => {
         const color = classColors[ann.class_id] || '#10b981';
-        const className = selectDropdown.querySelector(`option[value="${ann.class_id}"]`).text;
         
-        // Box
+        // Extra crash-proofing: Validate the option exists before reading its text
+        const option = selectDropdown.querySelector(`option[value="${ann.class_id}"]`);
+        const className = option ? option.text : "Unknown Defect";
+        
         ctx.strokeStyle = color; 
         ctx.lineWidth = 3;
         ctx.strokeRect(ann.x, ann.y, ann.w, ann.h);
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.2; // Transparent fill
+        ctx.globalAlpha = 0.2; 
         ctx.fillRect(ann.x, ann.y, ann.w, ann.h);
         ctx.globalAlpha = 1.0;
         
-        // Text Label
         ctx.fillStyle = color;
         ctx.font = "bold 14px Arial";
         ctx.fillText(className, ann.x, ann.y > 15 ? ann.y - 5 : ann.y + 15);
     });
     
-    // 2. Draw the CURRENT box being dragged by the mouse
     if (isDrawing && e) {
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
@@ -393,14 +393,13 @@ function draw(e) {
     if (currentRect) {
         ctx.strokeStyle = '#ef4444'; 
         ctx.lineWidth = 3;
-        ctx.setLineDash([5, 5]); // Dashed line to show it's active
+        ctx.setLineDash([5, 5]); 
         ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
-        ctx.setLineDash([]); // Reset to solid for next draw
+        ctx.setLineDash([]); 
     }
 }
 
 function stopDrawing() {
-    // If the user drew a box larger than 5 pixels, save it to the array
     if (isDrawing && currentRect && currentRect.w > 5 && currentRect.h > 5) {
         const class_id = document.getElementById('annotationClassSelect').value;
         currentAnnotations.push({
@@ -413,18 +412,18 @@ function stopDrawing() {
     }
     isDrawing = false;
     currentRect = null;
-    draw(); // Re-render everything solidly
+    draw(); 
 }
 
 window.undoLastAnnotation = function() {
     if (currentAnnotations.length > 0) {
-        currentAnnotations.pop(); // Remove the last box added
+        currentAnnotations.pop(); 
         draw();
     }
 };
 
 window.clearAnnotationCanvas = function() {
-    currentAnnotations = []; // Wipe the whole array
+    currentAnnotations = []; 
     currentRect = null;
     draw(); 
 };
@@ -433,7 +432,6 @@ window.saveAnnotation = async function() {
     if (!currentAnnotationImageId) return alert("Select an image first.");
     if (currentAnnotations.length === 0) return alert("Please draw at least one box. If you want to skip this image, use the Unflag button.");
 
-    // Map through the array and format EACH box into YOLO format
     const yoloLines = currentAnnotations.map(ann => {
         const x_center = (ann.x + ann.w / 2) / canvas.width;
         const y_center = (ann.y + ann.h / 2) / canvas.height;
@@ -442,89 +440,7 @@ window.saveAnnotation = async function() {
         return `${ann.class_id} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
     });
     
-    // Join all the boxes together with a newline character (\n)
     const yoloString = yoloLines.join('\n');
-
-    try {
-        const res = await fetch(`${BASE_URL}/api/images/${currentAnnotationImageId}/annotate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ yolo_annotation: yoloString })
-        });
-        if (res.ok) {
-            document.getElementById('annotationStatus').innerText = "✅ Saved!";
-            document.getElementById('annotationStatus').className = "health-badge badge-fair";
-            const img = flaggedImagesData.find(i => i.id === currentAnnotationImageId);
-            if (img) img.annotation = yoloString;
-            renderFlaggedGrid();
-        }
-    } catch(e) {
-        console.error(e);
-        alert("Failed to save annotation.");
-    }
-};
-
-function startDrawing(e) {
-    if (!currentAnnotationImageId) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    startX = (e.clientX - rect.left) * scaleX;
-    startY = (e.clientY - rect.top) * scaleY;
-    isDrawing = true;
-    currentRect = null; 
-}
-
-function draw(e) {
-    if (!currentAnnotationImageId) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
-    
-    if (isDrawing && e) {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const currentX = (e.clientX - rect.left) * scaleX;
-        const currentY = (e.clientY - rect.top) * scaleY;
-        
-        currentRect = {
-            x: Math.min(startX, currentX),
-            y: Math.min(startY, currentY),
-            w: Math.abs(currentX - startX),
-            h: Math.abs(currentY - startY)
-        };
-    }
-    
-    if (currentRect) {
-        ctx.strokeStyle = '#ef4444'; 
-        ctx.lineWidth = 4;
-        ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; 
-        ctx.fillRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
-    }
-}
-
-function stopDrawing() {
-    isDrawing = false;
-}
-
-window.clearAnnotationCanvas = function() {
-    currentRect = null;
-    draw(); 
-};
-
-window.saveAnnotation = async function() {
-    if (!currentAnnotationImageId) return alert("Select an image first.");
-    if (!currentRect) return alert("Draw a bounding box around the defect first.");
-
-    const x_center = (currentRect.x + currentRect.w / 2) / canvas.width;
-    const y_center = (currentRect.y + currentRect.h / 2) / canvas.height;
-    const width = currentRect.w / canvas.width;
-    const height = currentRect.h / canvas.height;
-    
-    const class_id = document.getElementById('annotationClassSelect').value;
-    const yoloString = `${class_id} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
 
     try {
         const res = await fetch(`${BASE_URL}/api/images/${currentAnnotationImageId}/annotate`, {
@@ -1604,16 +1520,12 @@ window.copyColabCode = function() {
     const codeElement = document.getElementById('colabCodeSnippet');
     const btn = document.getElementById('copyColabBtn');
 
-    // Copy the text inside the code block to the clipboard
     navigator.clipboard.writeText(codeElement.innerText).then(() => {
         const originalText = btn.innerHTML;
-        
-        // Provide visual feedback
         btn.innerHTML = "✅ Copied!";
-        btn.style.background = "#10b981"; // Turn green
+        btn.style.background = "#10b981"; 
         btn.style.borderColor = "#059669";
 
-        // Revert back after 2 seconds
         setTimeout(() => {
             btn.innerHTML = originalText;
             btn.style.background = "#3b82f6";
