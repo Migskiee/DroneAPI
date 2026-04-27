@@ -14,6 +14,52 @@ let selectedForDelete = new Set();
 let currentPreviewImageId = null;
 
 // =========================================
+// TOAST NOTIFICATION SYSTEM
+// =========================================
+window.showToast = function(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    // Add icons based on type
+    let icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'warning') icon = '⚠️';
+    if (type === 'info') icon = 'ℹ️';
+
+    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    
+    container.appendChild(toast);
+
+    // Trigger animation slightly after appending to DOM
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Remove toast after 3.5 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 400); // Wait for slide-out animation to finish
+    }, 3500);
+};
+
+// =========================================
+// SIDEBAR TOGGLE
+// =========================================
+window.toggleSidebar = function() {
+    // Toggles the class on the main body
+    document.body.classList.toggle('sidebar-collapsed');
+    
+    // We add a slight delay to let the CSS sliding animation finish, 
+    // then force Chart.js to resize itself to perfectly fit the new massive screen space!
+    setTimeout(() => {
+        if (globalChartInstance) globalChartInstance.resize();
+        if (detailChartInstance) detailChartInstance.resize();
+        if (missionChartInstance) missionChartInstance.resize();
+    }, 310);
+};
+
+// =========================================
 // ACTIVE LEARNING STATE
 // =========================================
 let flaggedImagesData = [];

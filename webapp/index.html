@@ -11,14 +11,26 @@
 </head>
 
 <body>
-    <div class="left-container">
-        <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
+    <div class="left-container" id="sidebar">
+        <div class="sidebar-header">
+            <h1 class="sidebar-title" style="font-size: 16px; margin: 0;">BRIDGE DEFECT DETECTION SYSTEM</h1>
+            <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
+        </div>
         <ul>
-            <li><a href="#" class="nav-link active" data-target="live-flight">LIVE FLIGHT</a></li>
-            <li><a href="#" class="nav-link" data-target="analytics">SYSTEM ANALYTICS</a></li>
-            <li><a href="#" class="nav-link" data-target="bridges">BRIDGE DATABASE</a></li>
-            <li><a href="#" class="nav-link" data-target="retraining">AI RETRAINING HUB</a></li>
-            <li><a href="#" class="nav-link" data-target="settings">SETTINGS</a></li>
+            <li><a href="#" class="nav-link active" data-target="live-flight">
+                    <span class="nav-icon"></span> <span class="nav-text">LIVE FLIGHT</span></a></li>
+                    
+            <li><a href="#" class="nav-link" data-target="analytics">
+                    <span class="nav-icon"></span> <span class="nav-text">SYSTEM ANALYTICS</span></a></li>
+                    
+            <li><a href="#" class="nav-link" data-target="bridges">
+                    <span class="nav-icon"></span> <span class="nav-text">BRIDGE DATABASE</span></a></li>
+                    
+            <li><a href="#" class="nav-link" data-target="retraining">
+                    <span class="nav-icon"></span> <span class="nav-text">AI RETRAINING HUB</span></a></li>
+                    
+            <li><a href="#" class="nav-link" data-target="settings">
+                    <span class="nav-icon"></span> <span class="nav-text">SETTINGS</span></a></li>
         </ul>
     </div>
 
@@ -666,6 +678,7 @@ else:
         </div>
     </div>
 
+    <div id="toast-container"></div>
     <script src="script.js"></script>
 </body>
 

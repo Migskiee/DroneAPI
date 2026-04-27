@@ -265,3 +265,129 @@ body { font-family: Arial, sans-serif; background: #f5f7fa; display: flex; flex-
 }
 .offline-content h2 { font-size: 32px; font-weight: bold; letter-spacing: 3px; margin-bottom: 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .offline-content p { color: #94a3b8; font-size: 15px; font-weight: bold; }
+
+/* ========================================= */
+/* TOAST NOTIFICATION SYSTEM                 */
+/* ========================================= */
+#toast-container {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    pointer-events: none; /* Lets you click through the invisible container */
+}
+
+.toast {
+    min-width: 250px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transform: translateX(120%);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast-success { background-color: #10B981; border-left: 6px solid #059669; }
+.toast-error { background-color: #EF4444; border-left: 6px solid #B91C1C; }
+.toast-info { background-color: #3B82F6; border-left: 6px solid #1D4ED8; }
+.toast-warning { background-color: #F59E0B; border-left: 6px solid #B45309; }
+
+/* ========================================= */
+/* COLLAPSIBLE SIDEBAR SYSTEM                */
+/* ========================================= */
+
+/* Add smooth transitions to the existing containers */
+.left-container {
+    transition: width 0.3s ease, min-width 0.3s ease;
+    overflow-x: hidden; 
+    display: flex;
+    flex-direction: column;
+}
+
+.right-container {
+    transition: width 0.3s ease;
+    flex: 1; /* Allows it to dynamically fill empty space */
+}
+
+/* Header and Button Styling */
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.sidebar-title {
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.hamburger-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #334155;
+    padding: 5px 10px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.hamburger-btn:hover { background: #e2e8f0; }
+
+/* Aligning Icons and Text */
+.nav-link {
+    display: flex !important;
+    align-items: center;
+    gap: 15px;
+    white-space: nowrap;
+}
+
+.nav-icon {
+    font-size: 20px;
+    min-width: 25px;
+    text-align: center;
+}
+
+/* ========================================= */
+/* THE COLLAPSED STATE overrides             */
+/* ========================================= */
+body.sidebar-collapsed .left-container {
+    width: 80px;
+    min-width: 80px;
+}
+
+body.sidebar-collapsed .right-container {
+    width: calc(100% - 80px);
+}
+
+body.sidebar-collapsed .sidebar-title,
+body.sidebar-collapsed .nav-text {
+    opacity: 0;
+    display: none;
+}
+
+body.sidebar-collapsed .sidebar-header {
+    justify-content: center;
+    padding: 20px 0;
+}
+
+body.sidebar-collapsed .left-container ul li a {
+    padding: 20px;
+    justify-content: center;
+}
