@@ -14,9 +14,7 @@
     <div class="left-container">
         <h1>BRIDGE DEFECT DETECTION SYSTEM</h1>
         <ul>
-            <li><a href="#" class="nav-link active" data-target="live-flight"
-                    style="color: #070707; font-weight: bold;">
-                    LIVE FLIGHT</a></li>
+            <li><a href="#" class="nav-link active" data-target="live-flight">LIVE FLIGHT</a></li>
             <li><a href="#" class="nav-link" data-target="analytics">SYSTEM ANALYTICS</a></li>
             <li><a href="#" class="nav-link" data-target="bridges">BRIDGE DATABASE</a></li>
             <li><a href="#" class="nav-link" data-target="retraining">AI RETRAINING HUB</a></li>
@@ -366,10 +364,13 @@
                                 <button class="btn btn-secondary" onclick="unflagImage()"
                                     style="margin: 0; color: #ef4444; border-color: #fca5a5; background: #fef2f2;">Unflag</button>
                                 
+                                <button class="btn btn-secondary" onclick="undoLastAnnotation()"
+                                    style="margin: 0;">↩️ Undo</button>
+                                
                                 <button class="btn btn-secondary" onclick="clearAnnotationCanvas()"
-                                    style="margin: 0;">🗑️ Clear Box</button>
+                                    style="margin: 0;">🗑️ Clear All</button>
                                 <button class="btn btn-primary" onclick="saveAnnotation()"
-                                    style="margin: 0; background: #10b981;">💾 Save Annotation</button>
+                                    style="margin: 0; background: #10b981;">💾 Save</button>
                             </div>
                         </div>
 
@@ -380,8 +381,10 @@
                             <canvas id="annotationCanvas"
                                 style="display: none; cursor: crosshair; max-width: 100%; max-height: 100%;"></canvas>
                         </div>
-                        <p class="text-muted" style="margin-top: 10px; font-size: 12px; text-align: center;">Click and
-                            drag on the image to draw a bounding box around the exact defect.</p>
+                        
+                        <p class="text-muted" style="margin-top: 10px; font-size: 12px; text-align: center;">
+                            Select a class, then click and drag to draw. You can draw <b>multiple boxes</b> on the same image.
+                        </p>
 
                     </div>
                 </div>
